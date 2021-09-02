@@ -1,0 +1,30 @@
+{
+	"name": "refex",
+	"version": "0.0.1",
+	"description": "一个基于Proxy的数据响应式轻量前端框架",
+	"private": false,
+	"main": "dist/refex.js",
+	"scripts": {
+		"serve": "cross-env NODE_ENV=development webpack",
+		"build": "cross-env NODE_ENV=production webpack"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/lovelin0523/refex"
+	},
+	"dependencies": {},
+	"author": "lingkai",
+	"license": "MIT",
+	"babel": {
+		"presets": [
+			"env"
+		],
+		"plugins": []
+	},
+	"devDependencies": {
+		"babel-core": "^6.26.3",
+		"babel-loader": "^7.1.5",
+		"babel-preset-env": "^1.7.0",
+		"cross-env": "^7.0.3"
+	}
+}
