@@ -177,19 +177,23 @@ class State {
 						//修饰符字段
 						let modifier = item.nodeName.substr(index + 1)
 						//加入指令集合
-						directives[directiveName] = {
-							modifier: modifier,
-							exp:item.nodeValue
+						if(directiveName){
+							directives[directiveName] = {
+								modifier: modifier || undefined,
+								exp:item.nodeValue
+							}
 						}
 					}
 					//不存在修饰符
 					else {
 						//指令名称
 						let directiveName = item.nodeName.substr(1)
-						//加入指令集合
-						directives[directiveName] = {
-							modifier: undefined,
-							exp:item.nodeValue
+						if(directiveName){
+							//加入指令集合
+							directives[directiveName] = {
+								modifier: undefined,
+								exp:item.nodeValue
+							}
 						}
 					}
 				}
@@ -277,7 +281,7 @@ class State {
 				oldVnode.dealDirectives(this, 'beforeUpdate', false)
 			}
 			//元素节点
-			if (newVnode.nodeType == 1) {
+			if (newVnode.nodeType == 1 && oldVnode.if) {
 				//更新属性
 				this._updateAttrs(newVnode, oldVnode)
 				//更新样式类
@@ -308,7 +312,7 @@ class State {
 			//触发自定义指令的beforeUnmount
 			oldVnode.dealDirectives(this, 'beforeUnmount')
 			//获取旧节点在父节点中的序列
-			let index = oldVnode.getVnodeIndex()
+			let index = oldVnode.getIndex()
 			//删除原来的旧节点，在原来的位置上插入新建的节点
 			parent.children.splice(index, 1, vnode)
 			//触发自定义指令的beforeMount
@@ -390,32 +394,40 @@ class State {
 		let updateEvents = newVnode.compare(oldVnode, 'events', 0)
 		for (let eventName in updateEvents) {
 			oldVnode.events[eventName] = updateEvents[eventName]
-			if (typeof oldVnode.events[eventName].handler != 'function') {
-				throw new TypeError('The value of #' + eventName + ' must be a function')
-			}
 		}
-
 		//获取新增的事件
 		let addEvents = newVnode.compare(oldVnode, 'events', 1)
 		for (let eventName in addEvents) {
 			oldVnode.events[eventName] = addEvents[eventName]
-			if (typeof oldVnode.events[eventName].handler != 'function') {
-				throw new TypeError('The value of #' + eventName + ' must be a function')
-			}
-			oldVnode.elm.addEventListener(eventName, e => {
+			const fun = e=>{
+				//self修饰符
+				if(oldVnode.events[eventName].modifier.includes('self')){
+					if(e.currentTarget != e.target){
+						return
+					}
+				}
 				//stop修饰符
 				if(oldVnode.events[eventName].modifier.includes('stop')){
 					e.stopPropagation()
 				}
 				//prevent修饰符
-				if(oldVnode.events[eventName].modifier.includes('prevent')){
-					if(e.cancelable){
-						e.preventDefault()
-					}
+				if(oldVnode.events[eventName].modifier.includes('prevent') && e.cancelable){
+					e.preventDefault()
 				}
-				//事件回调参数第一个永远固定为event，后面则是定义的参数
-				oldVnode.events[eventName].handler.apply(this.$data, [e, ...oldVnode.events[eventName].params])
-			})
+				//执行事件函数
+				if(typeof oldVnode.events[eventName].handler == 'function'){
+					//事件回调参数第一个永远固定为event，后面则是定义的参数
+					oldVnode.events[eventName].handler.apply(this.$data, [e, ...oldVnode.events[eventName].params])
+				}else {
+					let h = oldVnode.executeExpression(this.$data,oldVnode.events[eventName].handler)
+					h(this.$data)
+				}
+				//once修饰符
+				if(oldVnode.events[eventName].modifier.includes('once')){
+					e.currentTarget.removeEventListener(eventName,fun)
+				}
+			}
+			oldVnode.elm.addEventListener(eventName, fun)
 		}
 	}
 
@@ -454,7 +466,7 @@ class State {
 		//进行更新操作
 		for (let attr in updateAttrs) {
 			let val = updateAttrs[attr]
-			oldVnode.attrs[attr] = updateAttrs[attr]
+			oldVnode.attrs[attr] = val
 			//val是false、null、undefined则移除属性
 			if (val === false || val === null || val === undefined) {
 				oldVnode.elm.removeAttribute(attr)
@@ -608,17 +620,11 @@ class State {
 		let oldValue = target[property]
 		if (Array.isArray(oldValue)) {
 			oldValue = [...oldValue]
-		} else if (typeof oldValue == 'object') {
+		} else if (typeof oldValue == 'object' && oldValue) {
 			oldValue = Object.assign({}, oldValue)
 		}
-		//如果value是undefined直接删除属性
-		if (value === undefined) {
-			//删除属性
-			Reflect.deleteProperty(target, property)
-		} else {
-			//设置值
-			Reflect.set(target, property, value)
-		}
+		//设置值
+		Reflect.set(target, property, value)
 		//如果属性变化
 		if (oldValue !== value) {
 			//触发beforeUpdate生命周期函数

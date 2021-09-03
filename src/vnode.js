@@ -32,6 +32,248 @@ class VNode {
 		this.if = true
 		//for指令遍历数据
 		this.forData = {}
+		//是否使用了if指令
+		this.useIf = false
+		//是否使用了else-if指令
+		this.useElseIf = false
+		//是否使用了else指令
+		this.useElse = false
+	}
+
+	/**
+	 * 处理for指令克隆节点
+	 * @param {State} state State实例
+	 */
+	dealFor(state) {
+		//该节点含有for指令，即需要进行克隆处理
+		if (this.directives['for']) {
+			//设置作用域
+			let scope = Object.assign({}, state.$data)
+			Object.assign(scope, this.getForData())
+			//解析for指令表达式
+			const res = this.parseFor(scope, this.directives['for'].exp)
+			//表达式不合法
+			if (!res) {
+				throw new Error(`Invalid @for expression: ${this.directives['for'].exp}`)
+			}
+			//原directives集合中去除for
+			delete this.directives['for']
+			//获取当前虚拟节点在父节点中的位置
+			const dex = this.getIndex()
+			//创建一个空数组存放克隆的节点
+			let cloneVnodes = []
+			//如果循环的是数组
+			if (Array.isArray(res.for)) {
+				let length = res.for.length
+				//遍历数组
+				for(let i = 0;i<length;i++){
+					//克隆节点
+					let copyVn = this.clone(i, res, i)
+					//设置父节点
+					copyVn.parent = this.parent
+					//加入数组中
+					cloneVnodes.push(copyVn)
+					//递归处理子节点的for指令
+					copyVn.children.forEach(childVnode => {
+						childVnode.dealFor(state)
+					})
+				}
+			}
+			//如果循环的是对象
+			else if (typeof res.for == 'object') {
+				//遍历对象
+				Object.keys(res.for).forEach((key, index) => {
+					//克隆节点
+					let copyVn = this.clone(index, res, index, key)
+					//设置父节点
+					copyVn.parent = this.parent
+					//加入数组
+					cloneVnodes.push(copyVn)
+					//递归处理子节点的for指令
+					copyVn.children.forEach(childVnode => {
+						childVnode.dealFor(state)
+					})
+				})
+			}
+			//删除该节点，添加克隆的节点
+			this.parent.children.splice(dex, 1, ...cloneVnodes)
+		}
+		//该节点无需进行克隆处理，进行递归遍历子节点
+		else {
+			this.children.forEach(childVnode => {
+				childVnode.dealFor(state)
+			})
+		}
+	}
+
+	/**
+	 * 虚拟节点的数据初始化：将一个未初始化的虚拟节点转为含有真实数据的虚拟节点
+	 * @param {State} state State实例
+	 */
+	init(state) {
+		//设置作用域
+		let scope = Object.assign({}, state.$data)
+		Object.assign(scope, this.getForData())
+		//元素节点进行初始化
+		if(this.nodeType == 1){
+			//if指令提取出来，单独作为if属性
+			if (this.directives['if']) {
+				//使用if时同时存在else-if、else则报错
+				if(this.directives['else-if'] || this.directives['else']){
+					throw new Error('"@if" and "@else-if" and "@else" cannot be used on the same node')
+				}
+				//解析指令的表达式值
+				this.if = this.parseExpression(scope, this.directives['if'].exp)
+				//进行标记
+				this.useIf = true
+				//从指令集合移除
+				delete this.directives['if']
+			}
+			
+			//else-if指令提取出来，单独作为if属性
+			if(this.directives['else-if']){
+				//使用else-if时同时存在else则报错
+				if(this.directives['else']){
+					throw new Error('"@else-if" and "@else" cannot be used on the same node')
+				}
+				//获取上一个兄弟节点
+				let brotherNode = this.getPrevBrotherNode()
+				//上一个兄弟节点不存在或者没有使用@if则直接报错
+				if(!brotherNode || !brotherNode.useIf){
+					throw new Error('"@else-if" cannot be used alone')
+				}
+				//上一个兄弟节点的if为true则不渲染
+				if(brotherNode.if){
+					this.if = false
+				}else {
+					//解析指令的表达式值
+					this.if = this.parseExpression(scope, this.directives['else-if'].exp)
+				}
+				//进行标记
+				this.useElseIf = true
+				//从指令集合移除
+				delete this.directives['else-if']
+			}
+			
+			//else指令提取出来，单独作为if属性
+			if(this.directives['else']){
+				//获取上一个兄弟节点
+				let brotherNode = this.getPrevBrotherNode()
+				//上一个兄弟节点不存在或者没有使用@if和@else-if，则直接报错
+				if(!brotherNode || (!brotherNode.useIf && !brotherNode.useElseIf)){
+					throw new Error('"@else" cannot be used alone')
+				}
+				//上一个兄弟节点使用的是@if
+				if(brotherNode.useIf){
+					if(brotherNode.if){
+						this.if = false
+					}else {
+						this.if = true
+					}
+				}
+				//上一个兄弟节点使用的是@else-if
+				else if(brotherNode.useElseIf){
+					//获取该节点的上一个兄弟节点
+					let brotherNode2 = brotherNode.getPrevBrotherNode()
+					//该节点的上一个兄弟节点没有使用@if直接报错
+					if(!brotherNode2 || !brotherNode2.useIf){
+						throw new Error('"@else" cannot be used alone')
+					}
+					if(brotherNode.if || brotherNode2.if){
+						this.if = false
+					}else {
+						this.if = true
+					}
+				}
+				//进行标记
+				this.useElse = true
+				//从指令集合移除
+				delete this.directives['else']
+			}
+			
+			//解析其他指令
+			for (let name in this.directives) {
+				//指令未定义报错
+				if (!state.$directives[name]) {
+					throw new Error(`The @${name} directive is undefined`)
+				}
+			}
+			
+			//初始化属性
+			let attrs = {}
+			for (let attr in this.attrs) {
+				let realAttrName = ''
+				let realAttrValue = null
+				//真实属性名称解析
+				realAttrName = this.parseText(scope, attr)
+				//判断属性值是否只是一对{{}}
+				let matchArray = this.attrs[attr].match(/^\{\{(.*?)\}\}$/g)
+				//一对{{}}
+				if (matchArray) {
+					const endIndex = this.attrs[attr].trim().length - 2
+					const exp = this.attrs[attr].trim().substring(2, endIndex)
+					//解析成数据
+					realAttrValue = this.parseExpression(scope, exp)
+				}
+				else {
+					//直接解析为字符串
+					realAttrValue = this.parseText(scope, this.attrs[attr])
+				}
+				attrs[realAttrName] = realAttrValue
+			}
+			this.attrs = attrs
+			
+			//初始化样式，此时this.cls为字符串
+			if(this.cls){
+				//判断样式值是否只是一对{{}}
+				let clsMatchArray = this.cls.match(/^\{\{(.*?)\}\}$/g)
+				let cls = {}
+				//一对{{}}
+				if (clsMatchArray) {
+					const endIndex = this.cls.trim().length - 2
+					const exp = this.cls.trim().substring(2, endIndex)
+					//解析成数据
+					let data = this.parseExpression(scope, exp)
+					//如果是数组，转为对象
+					if(Array.isArray(data)){
+						data.forEach(item=>{
+							cls[item] = true
+						})
+					}
+					//如果是对象直接存储
+					else if(typeof data == 'object' && data){
+						cls = Object.assign({},data)
+					}
+					//如果是字符串
+					else if(typeof data == 'string' && data){
+						cls[data] = true
+					}
+				}
+				//其他情况
+				else {
+					//直接解析为字符串后以空格划分为数组，然后转为对象
+					this.parseText(scope, this.cls).split(/\s+/g).forEach(item=>{
+						cls[item] = true
+					})
+				}
+				this.cls = cls
+			}else {
+				this.cls = {}
+			}
+			
+			//初始化事件
+			for (let eventName in this.events) {
+				this.events[eventName] = this.eventHandler(scope, eventName)
+			}
+		}
+		//文本节点初始化
+		else if(this.nodeType == 3){
+			this.text = this.parseText(scope, this.text)
+		}
+		//递归对子节点进行初始化
+		this.children.forEach(childVnode => {
+			childVnode.init(state)
+		})
 	}
 
 	/**
@@ -43,7 +285,6 @@ class VNode {
 		let name = this.tag.toLocaleLowerCase()
 		//如果该组件名称为自定义组件
 		if (state.$components[name]) {
-			console.log(this)
 			//获取自定义组件的注册函数的返回值
 			let template = state.$components[name].apply(state.$data)
 			//如果不返回任何值直接报错
@@ -93,7 +334,7 @@ class VNode {
 				//合并原节点和新建节点的样式类集
 				vnode.cls = Object.assign(vnode.cls, this.cls)
 				//插入当前节点的位置，并删除当前节点
-				let index = this.getVnodeIndex()
+				let index = this.getIndex()
 				this.parent.children.splice(index, 1, vnode)
 			}
 		}
@@ -104,7 +345,7 @@ class VNode {
 			})
 		}
 	}
-
+	
 	/**
 	 * 根据template对象创建子节点
 	 * @param {Object} template
@@ -146,7 +387,7 @@ class VNode {
 		}
 		//设置作用域
 		let scope = Object.assign({}, state.$data)
-		Object.assign(scope, this.forData)
+		Object.assign(scope, this.getForData())
 		//遍历指令集合
 		for (let name in this.directives) {
 			//获取指令的钩子函数集合
@@ -162,7 +403,7 @@ class VNode {
 				data = [val, modifier, exp, this]
 			} else {
 				//回调参数为el,data,modifier,exp,vnode
-				data = [this.elm, val, modifier, exp, this, this]
+				data = [this.elm, val, modifier, exp, this]
 			}
 			//如果该钩子函数存在直接调用
 			if (handler[hook]) {
@@ -175,170 +416,6 @@ class VNode {
 				childVnode.dealDirectives(state, hook)
 			})
 		}
-	}
-
-	/**
-	 * 处理for指令克隆节点
-	 * @param {State} state State实例
-	 */
-	dealFor(state) {
-		//该节点含有for指令，即需要进行克隆处理
-		if (this.directives['for']) {
-			//解析for指令表达式
-			const res = this.parseFor(state.$data, this.directives['for'].exp)
-			//表达式不合法
-			if (!res) {
-				throw new Error(`Invalid @for expression: ${this.directives['for'].exp}`)
-			}
-			//原directives集合中去除for
-			delete this.directives['for']
-			//获取当前虚拟节点在父节点中的位置
-			const dex = this.getVnodeIndex()
-			//创建一个空数组存放克隆的节点
-			let cloneVnodes = []
-			//如果循环的是数组
-			if (Array.isArray(res.for)) {
-				//遍历数组
-				res.for.forEach((item, index) => {
-					//克隆节点
-					let copyVn = this.clone(index, res, index)
-					//设置父节点
-					copyVn.parent = this.parent
-					//加入数组中
-					cloneVnodes.push(copyVn)
-					//递归处理子节点的for指令
-					copyVn.children.forEach(childVnode => {
-						childVnode.dealFor(state)
-					})
-				})
-			}
-			//如果循环的是对象
-			else if (typeof res.for == 'object') {
-				//遍历对象
-				Object.keys(res.for).forEach((key, index) => {
-					//克隆节点
-					let copyVn = this.clone(index, res, index, key)
-					//设置父节点
-					copyVn.parent = this.parent
-					//加入数组
-					cloneVnodes.push(copyVn)
-					//递归处理子节点的for指令
-					copyVn.children.forEach(childVnode => {
-						childVnode.dealFor(state)
-					})
-				})
-			}
-			//删除该节点，添加克隆的节点
-			this.parent.children.splice(dex, 1, ...cloneVnodes)
-		}
-		//该节点无需进行克隆处理，进行递归遍历子节点
-		else {
-			this.children.forEach(childVnode => {
-				childVnode.dealFor(state)
-			})
-		}
-	}
-
-	/**
-	 * 虚拟节点的数据初始化：将一个未初始化的虚拟节点转为含有真实数据的虚拟节点
-	 * @param {State} state State实例
-	 */
-	init(state) {
-		//设置作用域
-		let scope = Object.assign({}, state.$data)
-		Object.assign(scope, this.forData)
-
-		//if指令提取出来，单独作为if属性，原directives集合中去除if
-		if (this.directives['if']) {
-			//解析指令的表达式值
-			this.if = this.parseExpression(scope, this.directives['if'].exp)
-			delete this.directives['if']
-		}
-
-		//解析其他指令
-		for (let name in this.directives) {
-			//指令未定义报错
-			if (!state.$directives[name]) {
-				throw new Error(`The @${name} directive is undefined`)
-			}
-		}
-
-		//初始化属性
-		let attrs = {}
-		for (let attr in this.attrs) {
-			let realAttrName = ''
-			let realAttrValue = null
-			//真实属性名称解析
-			realAttrName = this.parseText(scope, attr)
-			//判断属性值是否只是一对{{}}
-			let matchArray = this.attrs[attr].match(/^\{\{(.*?)\}\}$/g)
-			//一对{{}}
-			if (matchArray) {
-				const endIndex = this.attrs[attr].trim().length - 2
-				const exp = this.attrs[attr].trim().substring(2, endIndex)
-				//解析成数据
-				realAttrValue = this.parseExpression(scope, exp)
-			}
-			else {
-				//直接解析为字符串
-				realAttrValue = this.parseText(scope, this.attrs[attr])
-			}
-			attrs[realAttrName] = realAttrValue
-		}
-		this.attrs = attrs
-
-		//初始化样式，此时this.cls为字符串
-		if(this.cls){
-			//判断样式值是否只是一对{{}}
-			let clsMatchArray = this.cls.match(/^\{\{(.*?)\}\}$/g)
-			let cls = {}
-			//一对{{}}
-			if (clsMatchArray) {
-				const endIndex = this.cls.trim().length - 2
-				const exp = this.cls.trim().substring(2, endIndex)
-				//解析成数据
-				let data = this.parseExpression(scope, exp)
-				//如果是数组，转为对象
-				if(Array.isArray(data)){
-					data.forEach(item=>{
-						cls[item] = true
-					})
-				}
-				//如果是对象直接存储
-				else if(typeof data == 'object' && data){
-					cls = Object.assign({},data)
-				}
-				//如果是字符串
-				else if(typeof data == 'string' && data){
-					cls[data] = true
-				}
-			}
-			//其他情况
-			else {
-				//直接解析为字符串后以空格划分为数组，然后转为对象
-				this.parseText(scope, this.cls).split(/\s+/g).forEach(item=>{
-					cls[item] = true
-				})
-			}
-			this.cls = cls
-		}else {
-			this.cls = {}
-		}
-		
-		//初始化事件
-		for (let eventName in this.events) {
-			this.events[eventName] = this.eventHandler(scope, eventName)
-		}
-
-		//初始化text
-		if (this.text) {
-			this.text = this.parseText(scope, this.text)
-		}
-		
-		//递归对子节点进行初始化
-		this.children.forEach(childVnode => {
-			childVnode.init(state)
-		})
 	}
 
 	/**
@@ -388,23 +465,34 @@ class VNode {
 			}
 			//设置事件
 			for (let eventName in this.events) {
-				if (typeof this.events[eventName].handler != 'function') {
-					throw new TypeError('The value of #' + eventName + ' must be a function')
-				}
-				el.addEventListener(eventName, e => {
+				const fun = e=>{
+					//self修饰符
+					if(this.events[eventName].modifier.includes('self')){
+						if(e.currentTarget != e.target){
+							return
+						}
+					}
 					//stop修饰符
 					if(this.events[eventName].modifier.includes('stop')){
 						e.stopPropagation()
 					}
 					//prevent修饰符
-					if(this.events[eventName].modifier.includes('prevent')){
-						if(e.cancelable){
-							e.preventDefault()
-						}
+					if(this.events[eventName].modifier.includes('prevent') && e.cancelable){
+						e.preventDefault()
 					}
-					//事件回调参数第一个永远固定为event，后面则是定义的参数
-					this.events[eventName].handler.apply(state.$data, [e, ...this.events[eventName].params])
-				})
+					if(typeof this.events[eventName].handler == 'function'){
+						//事件回调参数第一个永远固定为event，后面则是定义的参数
+						this.events[eventName].handler.apply(state.$data, [e, ...this.events[eventName].params])
+					}else {
+						let h = this.executeExpression(state.$data,this.events[eventName].handler)
+						h(state.$data)
+					}
+					//once修饰符
+					if(this.events[eventName].modifier.includes('once')){
+						e.currentTarget.removeEventListener(eventName,fun)
+					}
+				}
+				el.addEventListener(eventName, fun)
 			}
 			//遍历子节点
 			this.children.forEach(childVNode => {
@@ -431,13 +519,22 @@ class VNode {
 	 * @param {String} eventName
 	 */
 	eventHandler(scope, eventName) {
+		//定义处理函数
 		let handler = null
+		//定义回调参数
 		let params = []
+		//获取修饰符
 		let modifier = this.events[eventName].modifier
+		if(!this.events[eventName].handler){
+			throw new TypeError('The value of #' + eventName + ' shoud not be undefined')
+		}
+		//判断是否有参数
 		let res = /(.*)+\((.*)\)/g.exec(this.events[eventName].handler)
 		//有参数
 		if (res) {
+			//解析函数
 			handler = this.parseExpression(scope, res[1])
+			//获取参数
 			if (res[2]) {
 				params = res[2].split(',').map(value => {
 					return this.parseExpression(scope, value)
@@ -446,7 +543,12 @@ class VNode {
 		}
 		//无参数
 		else {
+			//解析函数
 			handler = this.parseExpression(scope, this.events[eventName].handler)
+			//如果解析结果不是函数，则直接作为字符串带过去
+			if(typeof handler != 'function'){
+				handler = this.events[eventName].handler
+			}
 		}
 		return {
 			handler,
@@ -460,7 +562,8 @@ class VNode {
 	 * @param {VNode} oldVNode
 	 */
 	isSame(oldVnode) {
-		return this.tag === oldVnode.tag && this.nodeType === oldVnode.nodeType && this.if === oldVnode.if
+		return this.tag === oldVnode.tag && this.nodeType === oldVnode.nodeType && this.if === oldVnode.if && this.useIf === oldVnode.useIf
+		&& this.useElseIf === oldVnode.useElseIf && this.useElse === oldVnode.useElse
 	}
 
 	/**
@@ -473,7 +576,7 @@ class VNode {
 		let res = {}
 		if (type == 0) {
 			for (let item in this[key]) {
-				if (oldVnode[key].hasOwnProperty(item) && oldVnode[key][item] !== this[key][item]) {
+				if (oldVnode[key].hasOwnProperty(item) && JSON.stringify(oldVnode[key][item]) !== JSON.stringify(this[key][item])) {
 					res[item] = this[key][item]
 				}
 			}
@@ -492,6 +595,18 @@ class VNode {
 			}
 		}
 		return res
+	}
+
+	/**
+	 * 获取当前节点及父/组件节点的forData
+	 */
+	getForData(){
+		let data = {}
+		Object.assign(data,this.forData)
+		if(this.parent){
+			Object.assign(data,this.parent.getForData())
+		}
+		return data
 	}
 
 	/**
@@ -566,7 +681,8 @@ class VNode {
 	 */
 	equal(oldVnode) {
 		if (this.id != oldVnode.id || this.tag != oldVnode.tag || this.nodeType != oldVnode.nodeType || this.if !=
-			oldVnode.if || this.isCloned != oldVnode.isCloned) {
+			oldVnode.if || this.isCloned != oldVnode.isCloned || this.useIf != oldVnode.useIf || this.useElseIf != oldVnode.useElseIf
+			|| this.useElse != oldVnode.useElse) {
 			return false
 		}
 		if (this.nodeType == 1) {
@@ -597,15 +713,33 @@ class VNode {
 	}
 
 	/**
+	 * 获取上一个兄弟元素节点
+	 */
+	getPrevBrotherNode(){
+		//获取当前节点在父节点的位置
+		let index = this.getIndex()
+		if(index <= 0){
+			return null
+		}
+		let brotherNode = this.parent.children[index-1]
+		if(brotherNode.nodeType != 1){
+			brotherNode = brotherNode.getPrevBrotherNode()
+		}
+		return brotherNode
+	}
+
+	/**
 	 * 获取虚拟节点在父节点中的序列
 	 */
-	getVnodeIndex() {
+	getIndex() {
 		let index = -1
-		let length = this.parent.children.length
-		for (let i = 0; i < length; i++) {
-			if (this.parent.children[i] === this) {
-				index = i
-				break
+		if(this.parent){
+			let length = this.parent.children.length
+			for (let i = 0; i < length; i++) {
+				if (this.parent.children[i] === this) {
+					index = i
+					break
+				}
 			}
 		}
 		return index
@@ -676,6 +810,27 @@ class VNode {
 		let nf = new Function("scope", code)
 		//执行代码块并且返回结果
 		return nf(scope)
+	}
+	
+	/**
+	 * 返回事件指向的表达式字符串封装函数，用于事件值为表达式的情况
+	 * @param {Object} scope
+	 * @param {Object} expression
+	 */
+	executeExpression(scope, expression) {
+		let code = ''
+		//动态生成变量声明代码
+		for (let key in scope) {
+			code += `let ${key} = scope['${key}'];`
+		}
+		code += `${expression};`
+		for (let key in scope){
+			code += `scope['${key}'] = ${key};`
+		}
+		//在代码块的前后追加代码声明
+		let nf = new Function("scope", code)
+		//执行代码块并且返回结果
+		return nf
 	}
 }
 

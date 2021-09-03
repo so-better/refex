@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>if条件渲染测试</title>
+		<style type="text/css">
+			[refex-cloak] {
+				display: none;
+			}
+			.area{
+				padding: 10px;
+				border-bottom: 1px solid #ddd;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app" refex-cloak>
+			<div class="area">
+				<p>通过变量控制元素渲染</p>
+				<div>
+					<button #click="show=!show">{{show?'点击隐藏右侧按钮':'点击显示右侧按钮'}}</button>
+					<button style="margin-left: 20px;" @if="show">被@if控制的按钮</button>
+				</div>
+			</div>
+			<div class="area">
+				<p>@if值变化会引起其他指令钩子函数触发</p>
+				<div>
+					<button #click="show2=!show2">{{show2?'点击隐藏右侧输入框':'点击显示右侧输入框'}}</button>
+					<input @focus style="margin-left: 20px;" @if="show2" placeholder="被@if控制的按钮" value="被@if控制的按钮" />
+				</div>
+			</div>
+			<div class="area">
+				<p>@if @else-if @else结合</p>
+				<div>
+					<p @if="count%3==0">{{count}}，count能被3整除时显示我</p>
+					<p @else-if="count%3==1">{{count}}，count被3除余1显示我</p>
+					<p @else>{{count}}，我是剩下的</p>
+					<button type="button" #click="count++">点我改变count</button>
+				</div>
+			</div>
+		</div>
+	</body>
+	<script src="../dist/refex.js" type="text/javascript" charset="utf-8"></script>
+	<script>
+		//引入必要的方法
+		const { proxy, useProxy, h } = Refex
+		//构建响应式数据
+		const state = proxy({
+			show:true,
+			show2:false,
+			count:0
+		})
+		//拿到可直接操作的响应式对象
+		const snap = useProxy(state)
+		let timer = null
+		//自定义一个指令
+		state.directive('focus',{
+			mounted:function(el){
+				el.focus()
+				timer = setInterval(()=>{
+					console.log('计时器输出')
+				},100)
+			},
+			unmounted:function(){
+				if(timer){
+					clearInterval(timer)
+					timer = null
+				}
+			}
+		})
+		//挂载
+		state.mount('#app')
+	</script>
+</html>

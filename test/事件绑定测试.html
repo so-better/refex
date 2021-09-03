@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>事件绑定测试</title>
+		<style type="text/css">
+			[refex-cloak] {
+				display: none;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app" refex-cloak>
+			<button type="button" #click="click">普通的点击事件</button>
+			<input type="text" #input="inpinput" #focus="inpfocus" #blur="inpblur" />
+			<button type="button" #click="click2(2)">带参数的事件</button>
+			<ul>
+				<li @for="(item,index) in list">
+					<button #click="click3(item,index,list)">{{item}}</button>
+				</li>
+			</ul>
+			<div>
+				<span>{{show}}</span>
+				<button type="button" #click="show=!show">事件直接执行表达式（不支持对循环的数据直接更改）</button>
+			</div>
+			<div>
+				<div #click="click4('父元素事件')" style="width: 100px;height: 100px;border: 1px solid #ddd;">
+					<button type="button" #click.stop="click4('阻止了向上传播')">stop修饰符</button>
+				</div>
+				<div>
+					<input type="checkbox" #click.prevent="click4('阻止了默认行为')"><span>prevent修饰符</span>
+				</div>
+				<div>
+					<button type="button" #click.once="click">once修饰符</button>
+				</div>
+				<div #click.self="click4('父元素事件')" style="width: 100px;height: 100px;border: 1px solid #ddd;">
+					<button type="button">self修饰符</button>
+				</div>
+			</div>
+		</div>
+	</body>
+	<script src="../dist/refex.js" type="text/javascript" charset="utf-8"></script>
+	<script>
+		//引入必要的方法
+		const { proxy, useProxy, h } = Refex
+		//构建响应式数据
+		const state = proxy({
+			show:false,
+			list:['mvi-web','element-ui','bootStrap','iview'],
+			click:function(e){
+				console.log('普通的点击事件',e)
+				console.log('--------------------------')
+			},
+			inpinput:function(e){
+				console.log('输入框持续输出',e.currentTarget.value)
+				console.log('--------------------------')
+			},
+			inpfocus:function(e){
+				console.log('输入框获取焦点',e)
+				console.log('--------------------------')
+			},
+			inpblur:function(e){
+				console.log('输入框失去焦点',e)
+				console.log('--------------------------')
+			},
+			click2:function(e,data){
+				console.log('带参数的点击事件',data)
+				console.log('--------------------------')
+			},
+			click3:function(e,item,index,list){
+				console.log('for循环中带参数的点击事件')
+				console.log('参数',item,index,list)
+				console.log('--------------------------')
+			},
+			click4:function(e,data){
+				console.log(data)
+			}
+		})
+		//拿到可直接操作的响应式对象
+		const snap = useProxy(state)
+		//挂载
+		state.mount('#app')
+	</script>
+</html>

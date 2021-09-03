@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>for循环指令测试</title>
+		<style type="text/css">
+			[refex-cloak] {
+				display: none;
+			}
+			.area{
+				padding: 10px;
+				border-bottom: 1px solid #ddd;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app" refex-cloak>
+			<div class="area">
+				<div>遍历有长度的空数组</div>
+				<ul>
+					<li @for="(item,index) in new Array(4)">{{index}}</li>
+				</ul>
+			</div>
+			<div class="area">
+				<div>遍历普通数组</div>
+				<ul>
+					<li @for="(item,index) in list">{{item}}</li>
+				</ul>
+			</div>
+			<div class="area">
+				<div>遍历对象</div>
+				<ul>
+					<li @for="(item,key,index) in obj">{{key}}：{{item}} { {{index}} }</li>
+				</ul>
+			</div>
+			<div class="area">
+				<div>遍历对象数组</div>
+				<div>
+					<p @for="(item,index) in btns">
+						<button #click="change(item,index)" disabled="{{item.disabled}}">{{item.name}}</button>
+					</p>
+				</div>
+			</div>
+			<div class="area">
+				<div>与@if指令结合</div>
+				<div>
+					<p @for="(item,index) in btns" @if="!item.disabled">
+						<button #click="change(item,index)">{{item.name}}</button>
+					</p>
+				</div>
+			</div>
+		</div>
+	</body>
+	<script src="../dist/refex.js" type="text/javascript" charset="utf-8"></script>
+	<script>
+		//引入必要的方法
+		const { proxy, useProxy, h } = Refex
+		//构建响应式数据
+		const state = proxy({
+			list:['vue','react','angular','refex'],
+			obj:{
+				name:'refex',
+				type:'JavaScript',
+				version:'1.0.0',
+				date:'2021/08/22'
+			},
+			btns:[
+				{
+					name:'PRIMARY',
+					disabled:false
+				},
+				{
+					name:'SUCCESS',
+					disabled:false
+				},
+				{
+					name:'INFO',
+					disabled:false
+				},
+				{
+					name:'WARN',
+					disabled:false
+				}
+			],
+			change:function(e,item,index){
+				this.btns[index].disabled = true
+				setTimeout(()=>{
+					this.btns[index].disabled = false
+				},1000)
+			}
+		})
+		//拿到可直接操作的响应式对象
+		const snap = useProxy(state)
+		
+		state.mount('#app')
+	</script>
+</html>
