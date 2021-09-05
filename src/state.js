@@ -23,14 +23,47 @@ class State {
 		this.onMounted = function() {}
 		this.onBeforeUpdate = function() {}
 		this.onUpdated = function() {}
+		//初始化操作
+		this._init()
+	}
+	
+	//初始化的一些处理
+	_init(){
+		//注册show指令
+		this.directive('show',{
+			mounted:function(el,value){
+				if(!value){
+					el.style.display = 'none'
+				}
+			},
+			updated:function(el,value){
+				if(value){
+					el.style.display = ''
+				}else {
+					el.style.display = 'none'
+				}
+			}
+		})
 	}
 
 	/**
-	 * 自定义组件
+	 * 注册/获取自定义组件
 	 * @param {Object} name 组件名称
-	 * @param {Function} handler 组件注册函数
+	 * @param {Object} handler 组件注册参数
 	 */
 	component(name, handler) {
+		//handler不存在则表示获取自定义组件
+		if (!handler) {
+			//name不存在，表示获取该state的所有自定义组件
+			if (!name) {
+				return this.$components
+			}
+			//获取指定名称的自定义组件
+			return this.$components[name]
+		}
+
+		//以下为注册自定义组件的实现
+
 		//组件名不存在报错
 		if (!name) {
 			throw new TypeError('You need to give the component a name')
@@ -39,20 +72,43 @@ class State {
 		if (this.$components[name]) {
 			throw new Error('The component named "' + name + '" is already defined')
 		}
-		//组件注册函数不存在报错
-		if (typeof handler != 'function') {
+		let props = []
+		let render = null
+		//组件注册参数为函数
+		if (typeof handler == 'function') {
+			render = handler
+		} else if (typeof handler == 'object' && handler) {
+			props = handler.props || []
+			render = handler.render
+		}
+		if (typeof render != 'function') {
 			throw new TypeError('The component named "' + name + '" need to define a handling method')
 		}
 		//注册该组件
-		this.$components[name] = handler
+		this.$components[name] = {
+			props,
+			render
+		}
 	}
 
 	/**
-	 * 自定义指令
+	 * 注册/获取自定义指令
 	 * @param {String} name 指令名称
 	 * @param {Object} handler 指令注册参数
 	 */
 	directive(name, handler) {
+		//handler不存在则表示获取自定义的指令
+		if (!handler) {
+			//name不存在，表示获取该state的所有自定义指令
+			if (!name) {
+				return this.$directives
+			}
+			//获取指定名称的自定义组件
+			return this.$directives[name]
+		}
+
+		//以下为注册自定义指令的实现
+
 		//指令名称不存在报错
 		if (!name) {
 			throw new TypeError('You need to give the directive a name')
@@ -177,10 +233,10 @@ class State {
 						//修饰符字段
 						let modifier = item.nodeName.substr(index + 1)
 						//加入指令集合
-						if(directiveName){
+						if (directiveName) {
 							directives[directiveName] = {
 								modifier: modifier || undefined,
-								exp:item.nodeValue
+								exp: item.nodeValue
 							}
 						}
 					}
@@ -188,11 +244,11 @@ class State {
 					else {
 						//指令名称
 						let directiveName = item.nodeName.substr(1)
-						if(directiveName){
+						if (directiveName) {
 							//加入指令集合
 							directives[directiveName] = {
 								modifier: undefined,
-								exp:item.nodeValue
+								exp: item.nodeValue
 							}
 						}
 					}
@@ -205,8 +261,8 @@ class State {
 					let eventName = res[0]
 					//加入事件集合
 					events[eventName] = {
-						handler:item.nodeValue,
-						modifier:res.filter((item,index)=>{
+						handler: item.nodeValue,
+						modifier: res.filter((item, index) => {
 							return index > 0
 						})
 					}
@@ -282,6 +338,8 @@ class State {
 			}
 			//元素节点
 			if (newVnode.nodeType == 1 && oldVnode.if) {
+				//更新指令
+				this._updateDirectives(newVnode,oldVnode)
 				//更新属性
 				this._updateAttrs(newVnode, oldVnode)
 				//更新样式类
@@ -327,6 +385,28 @@ class State {
 			oldVnode.dealDirectives(this, 'unmounted')
 			//触发自定义指令的mounted
 			vnode.dealDirectives(this, 'mounted')
+		}
+	}
+	
+	/**
+	 * 更新指令
+	 * @param {VNode} newVnode
+	 * @param {VNode} oldVnode
+	 */
+	_updateDirectives(newVnode, oldVnode){
+		//获取新增或者修改的指令
+		let a = newVnode.compare(oldVnode, 'directives', 0)
+		let b = newVnode.compare(oldVnode, 'directives', 1)
+		let updateDirectives = Object.assign(a, b)
+		//进行更新操作
+		for (let d in updateDirectives) {
+			oldVnode.directives[d] = Object.assign({},updateDirectives[d])
+		}
+		//获取移除的指令
+		let removeDirectives = newVnode.compare(oldVnode, 'directives', 2)
+		//进行移除操作
+		for (let d in removeDirectives) {
+			delete oldVnode.directives[d]
 		}
 	}
 
@@ -399,32 +479,34 @@ class State {
 		let addEvents = newVnode.compare(oldVnode, 'events', 1)
 		for (let eventName in addEvents) {
 			oldVnode.events[eventName] = addEvents[eventName]
-			const fun = e=>{
+			const fun = e => {
 				//self修饰符
-				if(oldVnode.events[eventName].modifier.includes('self')){
-					if(e.currentTarget != e.target){
+				if (oldVnode.events[eventName].modifier.includes('self')) {
+					if (e.currentTarget != e.target) {
 						return
 					}
 				}
 				//stop修饰符
-				if(oldVnode.events[eventName].modifier.includes('stop')){
+				if (oldVnode.events[eventName].modifier.includes('stop')) {
 					e.stopPropagation()
 				}
 				//prevent修饰符
-				if(oldVnode.events[eventName].modifier.includes('prevent') && e.cancelable){
+				if (oldVnode.events[eventName].modifier.includes('prevent') && e.cancelable) {
 					e.preventDefault()
 				}
 				//执行事件函数
-				if(typeof oldVnode.events[eventName].handler == 'function'){
+				if (typeof oldVnode.events[eventName].handler == 'function') {
 					//事件回调参数第一个永远固定为event，后面则是定义的参数
-					oldVnode.events[eventName].handler.apply(this.$data, [e, ...oldVnode.events[eventName].params])
-				}else {
-					let h = oldVnode.executeExpression(this.$data,oldVnode.events[eventName].handler)
+					oldVnode.events[eventName].handler.apply(this.$data, [e, ...oldVnode.events[eventName]
+						.params
+					])
+				} else {
+					let h = oldVnode.executeExpression(this.$data, oldVnode.events[eventName].handler)
 					h(this.$data)
 				}
 				//once修饰符
-				if(oldVnode.events[eventName].modifier.includes('once')){
-					e.currentTarget.removeEventListener(eventName,fun)
+				if (oldVnode.events[eventName].modifier.includes('once')) {
+					e.currentTarget.removeEventListener(eventName, fun)
 				}
 			}
 			oldVnode.elm.addEventListener(eventName, fun)
@@ -438,16 +520,17 @@ class State {
 	 */
 	_updateClass(newVnode, oldVnode) {
 		//样式发生了变化
-		if(JSON.stringify(newVnode.cls) != JSON.stringify(oldVnode.cls)){
+		if (JSON.stringify(newVnode.cls) != JSON.stringify(oldVnode.cls)) {
+			oldVnode.cls = Object.assign({}, newVnode.cls)
 			let cls = []
-			for (let item in newVnode.cls) {
-				if(newVnode.cls[item]){
+			for (let item in oldVnode.cls) {
+				if (oldVnode.cls[item]) {
 					cls.push(item)
 				}
 			}
-			if(cls.length){
+			if (cls.length) {
 				oldVnode.elm.setAttribute('class', cls.join(' '))
-			}else {
+			} else {
 				oldVnode.elm.removeAttribute('class')
 			}
 		}

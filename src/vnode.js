@@ -197,6 +197,8 @@ class VNode {
 				if (!state.$directives[name]) {
 					throw new Error(`The @${name} directive is undefined`)
 				}
+				//存储表达式对应的真实的值
+				this.directives[name].value = this.parseExpression(scope, this.directives[name].exp)
 			}
 			
 			//初始化属性
@@ -218,6 +220,10 @@ class VNode {
 				else {
 					//直接解析为字符串
 					realAttrValue = this.parseText(scope, this.attrs[attr])
+				}
+				//属性为空字符串的话，直接设为true
+				if(realAttrValue === ''){
+					realAttrValue = true
 				}
 				attrs[realAttrName] = realAttrValue
 			}
@@ -275,6 +281,50 @@ class VNode {
 			childVnode.init(state)
 		})
 	}
+	
+	/**
+	 * 事件数据初始化，返回事件方法、修饰符和回调参数
+	 * @param {Object} scope 
+	 * @param {String} eventName
+	 */
+	eventHandler(scope, eventName) {
+		//定义处理函数
+		let handler = null
+		//定义回调参数
+		let params = []
+		//获取修饰符
+		let modifier = this.events[eventName].modifier || undefined
+		if(!this.events[eventName].handler){
+			throw new TypeError('The value of #' + eventName + ' shoud not be undefined')
+		}
+		//判断是否有参数
+		let res = /(.*)+\((.*)\)/g.exec(this.events[eventName].handler)
+		//有参数
+		if (res) {
+			//解析函数
+			handler = this.parseExpression(scope, res[1])
+			//获取参数
+			if (res[2]) {
+				params = res[2].split(',').map(value => {
+					return this.parseExpression(scope, value)
+				})
+			}
+		}
+		//无参数
+		else {
+			//解析函数
+			handler = this.parseExpression(scope, this.events[eventName].handler)
+			//如果解析结果不是函数，则直接作为字符串带过去
+			if(typeof handler != 'function'){
+				handler = this.events[eventName].handler
+			}
+		}
+		return {
+			handler,
+			params,
+			modifier
+		}
+	}
 
 	/**
 	 * 处理组件渲染
@@ -285,8 +335,16 @@ class VNode {
 		let name = this.tag.toLocaleLowerCase()
 		//如果该组件名称为自定义组件
 		if (state.$components[name]) {
+			//获取自定义属性
+			let props = {}
+			for(let key in this.attrs){
+				if(state.$components[name].props.includes(key)){
+					props[key] = this.attrs[key]
+					delete this.attrs[key]
+				}
+			}
 			//获取自定义组件的注册函数的返回值
-			let template = state.$components[name].apply(state.$data)
+			let template = state.$components[name].render.apply(state.$data,[props])
 			//如果不返回任何值直接报错
 			if (!template) {
 				throw new Error('The template for component "' + name + '" is invalid')
@@ -329,10 +387,10 @@ class VNode {
 				vnode.events = Object.assign(vnode.events, this.events)
 				//合并原节点和新建节点的指令集
 				vnode.directives = Object.assign(vnode.directives, this.directives)
-				//合并原节点和新建节点的属性集
-				vnode.attrs = Object.assign(vnode.attrs, this.attrs)
 				//合并原节点和新建节点的样式类集
 				vnode.cls = Object.assign(vnode.cls, this.cls)
+				//合并非自定义属性的属性集
+				vnode.attrs = Object.assign(vnode.attrs,this.attrs)
 				//插入当前节点的位置，并删除当前节点
 				let index = this.getIndex()
 				this.parent.children.splice(index, 1, vnode)
@@ -394,16 +452,19 @@ class VNode {
 			let handler = state.$directives[name]
 			//回调参数设置
 			let data = []
+			//获取表达式
 			let exp = this.directives[name].exp
-			let val = this.parseExpression(scope,exp)
+			//获取修饰符
 			let modifier = this.directives[name].modifier
+			//获取值
+			let value = this.directives[name].value
 			//beforeMount和unmounted钩子函数的回调参数无el元素
 			if (hook == 'beforeMount' || hook == 'unmounted') {
 				//回调参数为value,modifier,exp,vnode
-				data = [val, modifier, exp, this]
+				data = [value, modifier, exp, this]
 			} else {
-				//回调参数为el,data,modifier,exp,vnode
-				data = [this.elm, val, modifier, exp, this]
+				//回调参数为el,value,modifier,exp,vnode
+				data = [this.elm, value, modifier, exp, this]
 			}
 			//如果该钩子函数存在直接调用
 			if (handler[hook]) {
@@ -467,17 +528,17 @@ class VNode {
 			for (let eventName in this.events) {
 				const fun = e=>{
 					//self修饰符
-					if(this.events[eventName].modifier.includes('self')){
+					if(this.events[eventName].modifier && this.events[eventName].modifier.includes('self')){
 						if(e.currentTarget != e.target){
 							return
 						}
 					}
 					//stop修饰符
-					if(this.events[eventName].modifier.includes('stop')){
+					if(this.events[eventName].modifier && this.events[eventName].modifier.includes('stop')){
 						e.stopPropagation()
 					}
 					//prevent修饰符
-					if(this.events[eventName].modifier.includes('prevent') && e.cancelable){
+					if(this.events[eventName].modifier && this.events[eventName].modifier.includes('prevent') && e.cancelable){
 						e.preventDefault()
 					}
 					if(typeof this.events[eventName].handler == 'function'){
@@ -488,7 +549,7 @@ class VNode {
 						h(state.$data)
 					}
 					//once修饰符
-					if(this.events[eventName].modifier.includes('once')){
+					if(this.events[eventName].modifier && this.events[eventName].modifier.includes('once')){
 						e.currentTarget.removeEventListener(eventName,fun)
 					}
 				}
@@ -511,50 +572,6 @@ class VNode {
 			el = document.createComment(this.text)
 		}
 		this.elm = el
-	}
-
-	/**
-	 * 事件数据初始化，返回事件方法、修饰符和回调参数
-	 * @param {Object} scope 
-	 * @param {String} eventName
-	 */
-	eventHandler(scope, eventName) {
-		//定义处理函数
-		let handler = null
-		//定义回调参数
-		let params = []
-		//获取修饰符
-		let modifier = this.events[eventName].modifier
-		if(!this.events[eventName].handler){
-			throw new TypeError('The value of #' + eventName + ' shoud not be undefined')
-		}
-		//判断是否有参数
-		let res = /(.*)+\((.*)\)/g.exec(this.events[eventName].handler)
-		//有参数
-		if (res) {
-			//解析函数
-			handler = this.parseExpression(scope, res[1])
-			//获取参数
-			if (res[2]) {
-				params = res[2].split(',').map(value => {
-					return this.parseExpression(scope, value)
-				})
-			}
-		}
-		//无参数
-		else {
-			//解析函数
-			handler = this.parseExpression(scope, this.events[eventName].handler)
-			//如果解析结果不是函数，则直接作为字符串带过去
-			if(typeof handler != 'function'){
-				handler = this.events[eventName].handler
-			}
-		}
-		return {
-			handler,
-			params,
-			modifier
-		}
 	}
 
 	/**
@@ -623,6 +640,11 @@ class VNode {
 		let nodeType = this.nodeType
 		let vnode = new VNode(tag, attrs, cls, directives, events, text, id, nodeType)
 		vnode.if = this.if
+		vnode.isCloned = this.isCloned
+		vnode.forData = Object.assign({},this.forData)
+		vnode.useIf = this.useIf
+		vnode.useElseIf = this.useElseIf
+		vnode.useElse = this.useElse
 		let children = []
 		//遍历子节点进行复制
 		for (let child of this.children) {

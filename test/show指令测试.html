@@ -2,7 +2,7 @@
 <html>
 	<head>
 		<meta charset="utf-8">
-		<title>directives指令测试</title>
+		<title>show指令测试</title>
 		<style type="text/css">
 			[refex-cloak] {
 				display: none;
@@ -16,7 +16,8 @@
 	<body>
 		<div id="app" refex-cloak>
 			<div class="area">
-				
+				<button type="button" #click="show=!show">{{show?'隐藏':'显示'}}</button>
+				<button type="button" @show="show">Button</button>
 			</div>
 		</div>
 	</body>
@@ -26,10 +27,11 @@
 		const { proxy, useProxy, h } = Refex
 		//构建响应式数据
 		const state = proxy({
-			
+			show:false
 		})
 		//拿到可直接操作的响应式对象
 		const snap = useProxy(state)
+		
 		//挂载
 		state.mount('#app')
 	</script>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>directives指令测试</title>
+		<style type="text/css">
+			[refex-cloak] {
+				display: none;
+			}
+			.area{
+				padding: 10px;
+				border-bottom: 1px solid #ddd;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app" refex-cloak>
+			<div class="area">
+				<div>自定义指令简单测试(输入框进入页面获取焦点)</div>
+				<div>
+					<input type="text" @focus>
+				</div>
+			</div>
+			<div class="area">
+				<div>通过指令实现双向绑定</div>
+				<div>value的值：{{value}}</div>
+				<div>
+					<input type="text" @model:value="value">
+				</div>
+				<div>
+					<button type="button" #click="value='333'">直接修改value的值</button>
+				</div>
+			</div>
+			<div class="area">
+				<div>一个计时器组件的生命周期</div>
+				<div>
+					<div @timer @if="show">{{count}}</div>
+					<div>
+						<button #click="show=!show" type="button">{{show?'隐藏上方的DIV':'渲染上方的DIV'}}</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</body>
+	<script src="../dist/refex.js" type="text/javascript" charset="utf-8"></script>
+	<script>
+		//引入必要的方法
+		const { proxy, useProxy, h, parse} = Refex
+		//构建响应式数据
+		const state = proxy({
+			value:'222',
+			count:0,
+			show:true
+		})
+		//拿到可直接操作的响应式对象
+		const snap = useProxy(state)
+		state.directive('focus',{
+			mounted:function(el,data,modifier,exp,vnode){
+				el.focus()
+			}
+		})
+		//通过const directive = state.directive('focus')获取focus指令，可判断指令是否存在
+		
+		state.directive('model',{
+			mounted:function(el,value){
+				el.value = value
+				el.addEventListener('input',e=>{
+					this.value = el.value
+				})
+			},
+			updated:function(el,value){
+				el.value = value
+			}
+		})
+		
+		let timer = null
+		
+		state.directive('timer',{
+			beforeMount:(data,modifier,exp,vnode)=>{
+				console.log('timer指令beforeMount钩子触发')
+			},
+			mounted:(data,modifier,exp,vnode)=>{
+				console.log('timer指令mounted钩子触发')
+				timer = setInterval(()=>{
+					snap.count++
+				},100)
+			},
+			beforeUpdate:(data,modifier,exp,vnode)=>{
+				console.log('timer指令beforeUpdate钩子触发')
+			},
+			updated:(data,modifier,exp,vnode)=>{
+				console.log('timer指令updated钩子触发')
+			},
+			beforeUnmount:(data,modifier,exp,vnode)=>{
+				console.log('timer指令beforeUnmount钩子触发')
+				clearInterval(timer)
+			},
+			unmounted:(data,modifier,exp,vnode)=>{
+				console.log('timer指令unmounted钩子触发')
+			}
+		})
+		
+		//挂载
+		state.mount('#app')
+	</script>
+</html>
