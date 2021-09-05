@@ -293,7 +293,7 @@ class VNode {
 		//定义回调参数
 		let params = []
 		//获取修饰符
-		let modifier = this.events[eventName].modifier || undefined
+		let modifier = this.events[eventName].modifier
 		if(!this.events[eventName].handler){
 			throw new TypeError('The value of #' + eventName + ' shoud not be undefined')
 		}
