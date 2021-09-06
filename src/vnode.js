@@ -429,7 +429,7 @@ class VNode {
 	}
 
 	/**
-	 * 处理指令(只有旧节点执行)
+	 * 触发自定义指令的钩子函数(只有旧节点执行)
 	 * @param {State} state State实例
 	 * @param {String} hook 钩子名称 
 	 * @param {Boolean} handlerChildren 是否处理子节点指令，默认为true
