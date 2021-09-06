@@ -277,7 +277,7 @@ class State {
 				}
 			}
 			//创建虚拟节点
-			vnode = new VNode(el.nodeName, attrs, cls, directives, events, undefined, id, el.nodeType)
+			vnode = new VNode(el.nodeName.toLocaleLowerCase(), attrs, cls, directives, events, undefined, id, el.nodeType)
 			//获取目标元素子节点
 			let nodes = el.childNodes
 			//子节点长度
@@ -298,7 +298,7 @@ class State {
 		//文本节点或者注释节点
 		else if (el.nodeType == 3 || el.nodeType == 8) {
 			//直接创建
-			vnode = new VNode(el.nodeName, {}, '', {}, {}, el.nodeValue, id, el.nodeType)
+			vnode = new VNode(el.nodeName.toLocaleLowerCase(), {}, '', {}, {}, el.nodeValue, id, el.nodeType)
 		}
 		return vnode
 	}
@@ -491,19 +491,19 @@ class State {
 		let addEvents = newVnode.compare(oldVnode, 'events', 1)
 		for (let eventName in addEvents) {
 			oldVnode.events[eventName] = addEvents[eventName]
-			const fun = e => {
+			oldVnode.elm.addEventListener(eventName, e=>{
 				//self修饰符
-				if (oldVnode.events[eventName].modifier.includes('self')) {
+				if (oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes('self')) {
 					if (e.currentTarget != e.target) {
 						return
 					}
 				}
 				//stop修饰符
-				if (oldVnode.events[eventName].modifier.includes('stop')) {
+				if (oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes('stop')) {
 					e.stopPropagation()
 				}
 				//prevent修饰符
-				if (oldVnode.events[eventName].modifier.includes('prevent') && e.cancelable) {
+				if (oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes('prevent') && e.cancelable) {
 					e.preventDefault()
 				}
 				//执行事件函数
@@ -514,12 +514,11 @@ class State {
 					let h = oldVnode.executeExpression(this.$data, oldVnode.events[eventName].handler)
 					h(this.$data)
 				}
-				//once修饰符
-				if (oldVnode.events[eventName].modifier.includes('once')) {
-					e.currentTarget.removeEventListener(eventName, fun)
-				}
-			}
-			oldVnode.elm.addEventListener(eventName, fun)
+			},{
+				once:oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes('once'),
+				capture:oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes('capture'),
+				passive:oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes('passive')
+			})
 		}
 	}
 

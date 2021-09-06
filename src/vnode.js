@@ -526,7 +526,7 @@ class VNode {
 			}
 			//设置事件
 			for (let eventName in this.events) {
-				const fun = e=>{
+				el.addEventListener(eventName, e=>{
 					//self修饰符
 					if(this.events[eventName].modifier && this.events[eventName].modifier.includes('self')){
 						if(e.currentTarget != e.target){
@@ -548,12 +548,11 @@ class VNode {
 						let h = this.executeExpression(state.$data,this.events[eventName].handler)
 						h(state.$data)
 					}
-					//once修饰符
-					if(this.events[eventName].modifier && this.events[eventName].modifier.includes('once')){
-						e.currentTarget.removeEventListener(eventName,fun)
-					}
-				}
-				el.addEventListener(eventName, fun)
+				},{
+					once:this.events[eventName].modifier && this.events[eventName].modifier.includes('once'),
+					capture:this.events[eventName].modifier && this.events[eventName].modifier.includes('capture'),
+					passive:this.events[eventName].modifier && this.events[eventName].modifier.includes('passive')
+				})
 			}
 			//遍历子节点
 			this.children.forEach(childVNode => {

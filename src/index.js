@@ -83,9 +83,6 @@ module.exports = {
 		
 		//是否渲染该节点，只有if明确为false时才会不进行渲染
 		let _if = options.if === false ? false : true
-		
-		//声明为prop的属性
-		let props = options.props || []
 
 		return {
 			tag,
@@ -95,8 +92,7 @@ module.exports = {
 			events,
 			text,
 			slots,
-			_if,
-			props
+			_if
 		}
 	},
 	
