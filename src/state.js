@@ -763,6 +763,30 @@ class State {
 		}
 		return false
 	}
+	
+	/**
+	 * 获取原始对象
+	 * @param {Object} data
+	 */
+	_getOriginalData(data){
+		let res = null
+		if(Array.isArray(data)){
+			res = []
+			for(let item of data){
+				let el = this._getOriginalData(item)
+				res.push(el)
+			}
+		}else if(this._isObject(data)){
+			res = {}
+			for(let key in data){
+				let el = this._getOriginalData(data[key])
+				res[key] = el
+			}
+		}else {
+			res = data
+		}
+		return res
+	}
 
 }
 

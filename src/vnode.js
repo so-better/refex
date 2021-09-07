@@ -32,6 +32,8 @@ class VNode {
 		this.if = true
 		//for指令遍历数据
 		this.forData = {}
+		//for指令遍历数据的解析结果
+		this.forRes = {}
 		//是否使用了if指令
 		this.useIf = false
 		//是否使用了else-if指令
@@ -48,7 +50,7 @@ class VNode {
 		//该节点含有for指令，即需要进行克隆处理
 		if (this.directives['for']) {
 			//设置作用域
-			let scope = Object.assign({}, state.$data)
+			let scope = state._getOriginalData(state.$data)
 			Object.assign(scope, this.getForData())
 			//解析for指令表达式
 			const res = this.parseFor(scope, this.directives['for'].exp)
@@ -80,7 +82,7 @@ class VNode {
 				}
 			}
 			//如果循环的是对象
-			else if (typeof res.for == 'object') {
+			else if (typeof res.for == 'object' && res.for) {
 				//遍历对象
 				Object.keys(res.for).forEach((key, index) => {
 					//克隆节点
@@ -112,7 +114,7 @@ class VNode {
 	 */
 	init(state) {
 		//设置作用域
-		let scope = Object.assign({}, state.$data)
+		let scope = state._getOriginalData(state.$data)
 		Object.assign(scope, this.getForData())
 		//元素节点进行初始化
 		if(this.nodeType == 1){
@@ -198,7 +200,11 @@ class VNode {
 					throw new Error(`The @${name} directive is undefined`)
 				}
 				//存储表达式对应的真实的值
-				this.directives[name].value = this.parseExpression(scope, this.directives[name].exp)
+				this.directives[name] = {
+					exp:this.directives[name].exp,
+					modifier:this.directives[name].modifier,
+					value:this.parseExpression(scope, this.directives[name].exp)
+				}
 			}
 			
 			//初始化属性
@@ -443,9 +449,6 @@ class VNode {
 		if (this.nodeType != 1) {
 			return
 		}
-		//设置作用域
-		let scope = Object.assign({}, state.$data)
-		Object.assign(scope, this.getForData())
 		//遍历指令集合
 		for (let name in this.directives) {
 			//获取指令的钩子函数集合
@@ -614,13 +617,29 @@ class VNode {
 	}
 
 	/**
-	 * 获取当前节点及父/组件节点的forData
+	 * 获取当前节点及父/祖先节点的forData
 	 */
 	getForData(){
 		let data = {}
 		Object.assign(data,this.forData)
 		if(this.parent){
 			Object.assign(data,this.parent.getForData())
+		}
+		return data
+	}
+
+	/**
+	 * 获取当前节点及父/祖先节点的forRes
+	 */
+	getForRes(){
+		let data = []
+		let obj = this
+		while(obj){
+			if(JSON.stringify(obj.forRes) != '{}'){
+				let res = Object.assign({},obj.forRes)
+				data.unshift(res)
+			}
+			obj = obj.parent
 		}
 		return data
 	}
@@ -641,6 +660,7 @@ class VNode {
 		vnode.if = this.if
 		vnode.isCloned = this.isCloned
 		vnode.forData = Object.assign({},this.forData)
+		vnode.forRes = Object.assign({},this.forRes)
 		vnode.useIf = this.useIf
 		vnode.useElseIf = this.useElseIf
 		vnode.useElse = this.useElse
@@ -679,18 +699,14 @@ class VNode {
 		//forData赋值
 		if (key) {
 			vnode.forData[res.item] = res.for[key]
-			if(res.index){
-				vnode.forData[res.index] = index
-			}
-			if(res.key){
-				vnode.forData[res.key] = key
-			}
+			vnode.forData[res.index] = index
+			vnode.forData[res.key] = key
 		} else {
 			vnode.forData[res.item] = res.for[index]
-			if(res.index){
-				vnode.forData[res.index] = index
-			}
+			vnode.forData[res.index] = index
 		}
+		//forRes赋值
+		vnode.forRes = Object.assign({},res)
 		//克隆其子节点
 		let children = []
 		for (let k in this.children) {
@@ -786,21 +802,28 @@ class VNode {
 		let alias = match[1].trim().replace(/[\(\)]/g, '').trim().split(',')
 		let res = {
 			for: forObj,
-			item: alias[0].trim()
+			item: alias[0].trim(),
+			exp:match[2].trim()
 		}
 		//遍历的是数组
 		if (Array.isArray(forObj)) {
 			if (alias.length > 1) {
 				res.index = alias[1].trim()
+			}else {
+				res.index = 'index'
 			}
 		}
 		//遍历对象
 		else if (typeof forObj == 'object' && forObj) {
 			if (alias.length > 1) {
 				res.key = alias[1].trim()
+			}else {
+				res.key = 'key'
 			}
 			if (alias.length > 2) {
 				res.index = alias[2].trim()
+			}else {
+				res.index = 'index'
 			}
 		}
 		return res

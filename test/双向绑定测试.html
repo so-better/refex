@@ -15,14 +15,11 @@
 	</head>
 	<body>
 		<div id="app" refex-cloak>
-			<div class="area">
-				<!-- <div>{{check}}</div> -->
-				<div>
-					<!-- <button type="button" #click="check=!check">改变check</button> -->
-				</div>
-				<div>
-					<input type="checkbox" @for="item in checks" @model="item"/>
-				</div>
+			<div>
+				{{arr}}
+			</div>
+			<div @for="el in arr">
+				<input type="checkbox" @for="(item,index) in el.checkbox" @model="el.checkedArray" value="{{item}}" />
 			</div>
 		</div>
 	</body>
@@ -32,9 +29,16 @@
 		const { proxy, useProxy, h } = Refex
 		//构建响应式数据
 		const state = proxy({
-			//check:false,
-			arr:[0,1,2,3],
-			checks:[false,false,true,false]
+			arr:[{
+				checkbox:[0,1,2,3,4],
+				checkedArray:[2]
+			},{
+				checkbox:[0,1,2,3,4],
+				checkedArray:[3]
+			}],
+			checked:false,
+			checkbox:[0,1,2,3,4],
+			checkedArray:[2]
 		})
 		//拿到可直接操作的响应式对象
 		const snap = useProxy(state)
