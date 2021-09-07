@@ -22,16 +22,6 @@
 				</div>
 			</div>
 			<div class="area">
-				<div>通过指令实现双向绑定</div>
-				<div>value的值：{{value}}</div>
-				<div>
-					<input type="text" @model:value="value">
-				</div>
-				<div>
-					<button type="button" #click="value='333'">直接修改value的值</button>
-				</div>
-			</div>
-			<div class="area">
 				<div>一个计时器组件的生命周期</div>
 				<div>
 					<div @timer @if="show">{{count}}</div>
@@ -60,18 +50,6 @@
 			}
 		})
 		//通过const directive = state.directive('focus')获取focus指令，可判断指令是否存在
-		
-		state.directive('model',{
-			mounted:function(el,value){
-				el.value = value
-				el.addEventListener('input',e=>{
-					this.value = el.value
-				})
-			},
-			updated:function(el,value){
-				el.value = value
-			}
-		})
 		
 		let timer = null
 		

@@ -44,6 +44,9 @@ module.exports = {
 			options = {}
 		}
 		
+		//tag转为小写
+		tag = tag.toLocaleLowerCase()
+		
 		//属性参数校验
 		let attrs = options.attrs || {}
 		

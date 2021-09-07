@@ -1,4 +1,5 @@
 const VNode = require('./vnode')
+const customDirectives = require('./custom-directives')
 /**
  * 数据状态管理
  */
@@ -26,26 +27,15 @@ class State {
 		//初始化操作
 		this._init()
 	}
-	
+
 	/**
 	 * 初始化的一些处理
 	 */
-	_init(){
-		//注册show指令
-		this.directive('show',{
-			mounted:function(el,value){
-				if(!value){
-					el.style.display = 'none'
-				}
-			},
-			updated:function(el,value){
-				if(value){
-					el.style.display = ''
-				}else {
-					el.style.display = 'none'
-				}
-			}
-		})
+	_init() {
+		//注册一些指令
+		for(let name in customDirectives){
+			this.directive(name, customDirectives[name])
+		}
 	}
 
 	/**
@@ -277,7 +267,8 @@ class State {
 				}
 			}
 			//创建虚拟节点
-			vnode = new VNode(el.nodeName.toLocaleLowerCase(), attrs, cls, directives, events, undefined, id, el.nodeType)
+			vnode = new VNode(el.nodeName.toLocaleLowerCase(), attrs, cls, directives, events, undefined, id, el
+				.nodeType)
 			//获取目标元素子节点
 			let nodes = el.childNodes
 			//子节点长度
@@ -339,7 +330,7 @@ class State {
 			//元素节点
 			if (newVnode.nodeType == 1 && oldVnode.if) {
 				//更新指令
-				this._updateDirectives(newVnode,oldVnode)
+				this._updateDirectives(newVnode, oldVnode)
 				//更新属性
 				this._updateAttrs(newVnode, oldVnode)
 				//更新样式类
@@ -387,20 +378,20 @@ class State {
 			vnode.dealDirectives(this, 'mounted')
 		}
 	}
-	
+
 	/**
 	 * 更新指令
 	 * @param {VNode} newVnode
 	 * @param {VNode} oldVnode
 	 */
-	_updateDirectives(newVnode, oldVnode){
+	_updateDirectives(newVnode, oldVnode) {
 		//获取新增或者修改的指令
 		let a = newVnode.compare(oldVnode, 'directives', 0)
 		let b = newVnode.compare(oldVnode, 'directives', 1)
 		let updateDirectives = Object.assign(a, b)
 		//进行更新操作
 		for (let d in updateDirectives) {
-			oldVnode.directives[d] = Object.assign({},updateDirectives[d])
+			oldVnode.directives[d] = Object.assign({}, updateDirectives[d])
 		}
 		//获取移除的指令
 		let removeDirectives = newVnode.compare(oldVnode, 'directives', 2)
@@ -491,33 +482,41 @@ class State {
 		let addEvents = newVnode.compare(oldVnode, 'events', 1)
 		for (let eventName in addEvents) {
 			oldVnode.events[eventName] = addEvents[eventName]
-			oldVnode.elm.addEventListener(eventName, e=>{
+			oldVnode.elm.addEventListener(eventName, e => {
 				//self修饰符
-				if (oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes('self')) {
+				if (oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes(
+						'self')) {
 					if (e.currentTarget != e.target) {
 						return
 					}
 				}
 				//stop修饰符
-				if (oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes('stop')) {
+				if (oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes(
+						'stop')) {
 					e.stopPropagation()
 				}
 				//prevent修饰符
-				if (oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes('prevent') && e.cancelable) {
+				if (oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes(
+						'prevent') && e.cancelable) {
 					e.preventDefault()
 				}
 				//执行事件函数
 				if (typeof oldVnode.events[eventName].handler == 'function') {
 					//事件回调参数第一个永远固定为event，后面则是定义的参数
-					oldVnode.events[eventName].handler.apply(this.$data, [e, ...oldVnode.events[eventName].params])
+					oldVnode.events[eventName].handler.apply(this.$data, [e, ...oldVnode.events[eventName]
+						.params
+					])
 				} else {
 					let h = oldVnode.executeExpression(this.$data, oldVnode.events[eventName].handler)
 					h(this.$data)
 				}
-			},{
-				once:oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes('once'),
-				capture:oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes('capture'),
-				passive:oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes('passive')
+			}, {
+				once: oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes(
+					'once'),
+				capture: oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier
+					.includes('capture'),
+				passive: oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier
+					.includes('passive')
 			})
 		}
 	}
@@ -552,7 +551,7 @@ class State {
 				childVnode.dealDirectives(this, 'unmounted')
 			})
 			oldVnode.children = []
-			newVnode.children.forEach(childVnode=>{
+			newVnode.children.forEach(childVnode => {
 				let copyChild = childVnode.copy()
 				oldVnode.children.push(copyChild)
 				//触发自定义指令的beforeMount

@@ -679,11 +679,17 @@ class VNode {
 		//forData赋值
 		if (key) {
 			vnode.forData[res.item] = res.for[key]
-			vnode.forData[res.index] = index
-			vnode.forData[res.key] = key
+			if(res.index){
+				vnode.forData[res.index] = index
+			}
+			if(res.key){
+				vnode.forData[res.key] = key
+			}
 		} else {
 			vnode.forData[res.item] = res.for[index]
-			vnode.forData[res.index] = index
+			if(res.index){
+				vnode.forData[res.index] = index
+			}
 		}
 		//克隆其子节点
 		let children = []
