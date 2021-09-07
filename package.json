@@ -1,6 +1,6 @@
 {
 	"name": "refex",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"description": "一个基于Proxy的数据响应式轻量前端框架",
 	"private": false,
 	"main": "dist/refex.js",

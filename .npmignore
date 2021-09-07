@@ -1,9 +1,3 @@
 # 忽略目录
-example/
-public/
-
-# 忽略指定文件
-vue.config.js
-babel.config.js
-*.map
-demo.html
+node_modules/
+test/
