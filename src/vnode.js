@@ -32,8 +32,6 @@ class VNode {
 		this.if = true
 		//for指令遍历数据
 		this.forData = {}
-		//for指令遍历数据的解析结果
-		this.forRes = {}
 		//是否使用了if指令
 		this.useIf = false
 		//是否使用了else-if指令
@@ -629,22 +627,6 @@ class VNode {
 	}
 
 	/**
-	 * 获取当前节点及父/祖先节点的forRes
-	 */
-	getForRes(){
-		let data = []
-		let obj = this
-		while(obj){
-			if(JSON.stringify(obj.forRes) != '{}'){
-				let res = Object.assign({},obj.forRes)
-				data.unshift(res)
-			}
-			obj = obj.parent
-		}
-		return data
-	}
-
-	/**
 	 * 复制该节点(只有新节点执行，且该新节点是已经初始化的节点)
 	 */
 	copy() {
@@ -660,7 +642,6 @@ class VNode {
 		vnode.if = this.if
 		vnode.isCloned = this.isCloned
 		vnode.forData = Object.assign({},this.forData)
-		vnode.forRes = Object.assign({},this.forRes)
 		vnode.useIf = this.useIf
 		vnode.useElseIf = this.useElseIf
 		vnode.useElse = this.useElse
@@ -705,8 +686,6 @@ class VNode {
 			vnode.forData[res.item] = res.for[index]
 			vnode.forData[res.index] = index
 		}
-		//forRes赋值
-		vnode.forRes = Object.assign({},res)
 		//克隆其子节点
 		let children = []
 		for (let k in this.children) {
