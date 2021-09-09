@@ -18,7 +18,13 @@
 			<div class="area">
 				<div>遍历有长度的空数组</div>
 				<ul>
-					<li @for="(item,index) in new Array(4)">{{index}}</li>
+					<li @for="(item,index) of new Array(4)">{{index}}</li>
+				</ul>
+			</div>
+			<div class="area">
+				<div>遍历数字</div>
+				<ul>
+					<li @for="(item,index) in 4">{{index}}</li>
 				</ul>
 			</div>
 			<div class="area">
@@ -49,6 +55,16 @@
 					</p>
 				</div>
 			</div>
+			<div class="area">
+				<div>多重for循环嵌套</div>
+				<div>
+					<ul>
+						<li @for="item in arr">
+							<div @for="el in item">{{key}}：{{el}}</div>
+						</li>
+					</ul>
+				</div>
+			</div>
 		</div>
 	</body>
 	<script src="../dist/refex.js" type="text/javascript" charset="utf-8"></script>
@@ -57,6 +73,23 @@
 		const { proxy, useProxy, h } = Refex
 		//构建响应式数据
 		const state = proxy({
+			arr:[
+				{
+					name:'张三',
+					age:24,
+					sex:'男'
+				},
+				{
+					name:'李四',
+					age:20,
+					sex:'女'
+				},
+				{
+					name:'赵二',
+					age:28,
+					sex:'男'
+				}
+			],
 			list:['vue','react','angular','refex'],
 			obj:{
 				name:'refex',

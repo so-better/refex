@@ -65,6 +65,13 @@
 				<div>h函数实现自定义组件内部嵌套</div>
 				<my-btns primary="{{primary}}"></my-btns>
 			</div>
+			<div class="area">
+				<div>component内部组件</div>
+				<component name="my-buttons" props="{{props}}"></component>
+			</div>
+			<div class="area">
+				<button #click="change">点击改变primary的值</button>
+			</div>
 		</div>
 	</body>
 	<script src="../dist/refex.js" type="text/javascript" charset="utf-8"></script>
@@ -77,7 +84,13 @@
 		} = Refex
 		//构建响应式数据
 		const state = proxy({
-			primary:false
+			primary:false,
+			props:{
+				primary:false
+			},
+			change:function(){
+				this.props.primary = !this.props.primary
+			}
 		})
 		//拿到可直接操作的响应式对象
 		const snap = useProxy(state)
@@ -92,15 +105,7 @@
 			props:['primary'],
 			render:function(props){
 				return h('button',{
-					attrs:{
-						type:'button'
-					},
-					events:{
-						click:function(){
-							this.primary = !this.primary
-						}
-					},
-					cls:{
+					classes:{
 						btn:true,
 						'btn-primary':props.primary
 					},
@@ -112,7 +117,7 @@
 		state.component('my-buttons',{
 			props:['primary'],
 			render:function(props){
-				return `<div class="btns"><my-button #click="primary=!primary" primary="{{primary}}"></my-button><my-button #click="primary=!primary" primary="{{primary}}"></my-button><my-button #click="primary=!primary" primary="{{primary}}"></my-button><my-button #click="primary=!primary" primary="{{primary}}"></my-button></div>`
+				return `<div class="btns"><my-button primary="{{${props.primary}}}"></my-button><my-button primary="{{${props.primary}}}"></my-button><my-button primary="{{${props.primary}}}"></my-button><my-button primary="{{${props.primary}}}"></my-button></div>`
 			}
 		})
 		
@@ -121,7 +126,7 @@
 			props:['primary'],
 			render:function(props){
 				return h('div',{
-					cls:['btns'],
+					classes:['btns'],
 					slots:[
 						btn.render(props),
 						btn.render(props),
@@ -130,7 +135,7 @@
 							attrs:{
 								type:'submit'
 							},
-							cls:{
+							classes:{
 								btn:true
 							},
 							text:'Button2'

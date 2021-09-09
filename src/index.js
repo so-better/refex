@@ -57,20 +57,20 @@ module.exports = {
 		let attrs = options.attrs || {}
 
 		//样式类校验，支持数组、对象和字符串，最终转为对象
-		let cls = {}
-		if (Array.isArray(options.cls)) {
-			options.cls.forEach(item => {
-				cls[item] = true
+		let classes = {}
+		if (Array.isArray(options.classes)) {
+			options.classes.forEach(item => {
+				classes[item] = true
 			})
-		} else if (typeof options.cls == 'object' && options.cls) {
-			cls = Object.assign({}, options.cls)
-		} else if (typeof options.cls == 'string' && options.cls) {
-			cls[options.cls] = true
+		} else if (typeof options.classes == 'object' && options.classes) {
+			classes = Object.assign({}, options.classes)
+		} else if (typeof options.classes == 'string' && options.classes) {
+			classes[options.classes] = true
 		} else {
-			cls = {}
+			classes = {}
 		}
 
-		//指令集合，key为指令名称，值为指令参数，包含value和modifier两个数值，如：{ model:{value:333,modifier:'value'} }
+		//指令集合，key为指令名称，值为指令参数，包含value和modifier两个数值，如：{ model:{value:333,modifier:{value:true}} }
 		let directives = options.directives || {}
 
 		//事件集合，如：{ click:function(){} }
@@ -80,7 +80,7 @@ module.exports = {
 			events[eventName] = {
 				handler: tmpEvents[eventName],
 				params: [],
-				modifier: undefined
+				modifier: {}
 			}
 		}
 
@@ -96,7 +96,7 @@ module.exports = {
 		return {
 			tag,
 			attrs,
-			cls,
+			classes,
 			directives,
 			events,
 			text,

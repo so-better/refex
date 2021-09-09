@@ -11,7 +11,7 @@
 	</head>
 	<body>
 		<div id="app" refex-cloak>
-			<button type="button" #click="click">普通的点击事件</button>
+			<button type="button" #{{eventname}}="click">普通的点击事件</button>
 			<input type="text" #input="inpinput" #focus="inpfocus" #blur="inpblur" />
 			<button type="button" #click="click2(2)">带参数的事件</button>
 			<ul>
@@ -45,10 +45,11 @@
 		const { proxy, useProxy, h } = Refex
 		//构建响应式数据
 		const state = proxy({
+			eventname:'click',
 			show:false,
 			list:['mvi-web','element-ui','bootStrap','iview'],
 			click:function(e){
-				console.log('普通的点击事件',e)
+				console.log('普通的点击事件',e.type)
 				console.log('--------------------------')
 			},
 			inpinput:function(e){
@@ -64,6 +65,7 @@
 				console.log('--------------------------')
 			},
 			click2:function(e,data){
+				this.eventname = 'focus'
 				console.log('带参数的点击事件',data)
 				console.log('--------------------------')
 			},

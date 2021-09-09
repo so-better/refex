@@ -46,6 +46,7 @@
 		const snap = useProxy(state)
 		state.directive('focus',{
 			mounted:function(el,data,modifier,exp,vnode){
+				console.log(el,data,modifier,exp,vnode)
 				el.focus()
 			}
 		})

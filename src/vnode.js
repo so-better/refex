@@ -1,25 +1,25 @@
+const util = require('./util')
 /**
  * 虚拟节点
  */
 class VNode {
-	
-	constructor(tag, attrs, cls, directives, events, text, id, nodeType) {
+	constructor(uid, tag, nodeType, attrs, classes, directives, events, text) {
+		//节点id
+		this.uid = uid
 		//标签名称
 		this.tag = tag
+		//节点类型
+		this.nodeType = nodeType
 		//属性集合
 		this.attrs = attrs
 		//样式类集合
-		this.cls = cls
+		this.classes = classes
 		//指令集合
 		this.directives = directives
 		//事件集合
 		this.events = events
 		//节点文字
 		this.text = text
-		//节点id
-		this.id = id
-		//节点类型
-		this.nodeType = nodeType
 		//父虚拟节点
 		this.parent = undefined
 		//子虚拟节点列表
@@ -32,12 +32,8 @@ class VNode {
 		this.if = true
 		//for指令遍历数据
 		this.forData = {}
-		//是否使用了if指令
-		this.useIf = false
-		//是否使用了else-if指令
-		this.useElseIf = false
-		//是否使用了else指令
-		this.useElse = false
+		//0示使用了if指令，1表示使用了else-if指令，2表示使用了else指令，-1表示以上皆未使用
+		this.ifType = -1
 	}
 
 	/**
@@ -47,35 +43,39 @@ class VNode {
 	dealFor(state) {
 		//该节点含有for指令，即需要进行克隆处理
 		if (this.directives['for']) {
-			//设置作用域
-			let scope = state._getOriginalData(state.$data)
-			Object.assign(scope, this.getForData())
-			//解析for指令表达式
-			const res = this.parseFor(scope, this.directives['for'].exp)
-			//表达式不合法
-			if (!res) {
-				throw new Error(`Invalid @for expression: ${this.directives['for'].exp}`)
-			}
+			let exp = this.directives['for'].exp
 			//原directives集合中去除for
 			delete this.directives['for']
+			//设置作用域
+			let scope = util.getOriginalData(state.$data)
+			Object.assign(scope, this.getForData())
+			//解析for指令表达式
+			const res = util.parseFor(scope, exp)
+			//表达式不合法
+			if (!res) {
+				throw new Error(`Invalid @for expression: ${exp}`)
+			}
 			//获取当前虚拟节点在父节点中的位置
 			const dex = this.getIndex()
 			//创建一个空数组存放克隆的节点
-			let cloneVnodes = []
+			let cloneVNodes = []
 			//如果循环的是数组
 			if (Array.isArray(res.for)) {
 				let length = res.for.length
 				//遍历数组
-				for(let i = 0;i<length;i++){
+				for (let i = 0; i < length; i++) {
 					//克隆节点
-					let copyVn = this.clone(i, res, i)
+					let copyVn = this.clone(i)
 					//设置父节点
 					copyVn.parent = this.parent
+					//设置forData的值
+					copyVn.forData[res.item] = res.for[i]
+					copyVn.forData[res.index] = i
 					//加入数组中
-					cloneVnodes.push(copyVn)
+					cloneVNodes.push(copyVn)
 					//递归处理子节点的for指令
-					copyVn.children.forEach(childVnode => {
-						childVnode.dealFor(state)
+					copyVn.children.forEach(childVNode => {
+						childVNode.dealFor(state)
 					})
 				}
 			}
@@ -84,24 +84,28 @@ class VNode {
 				//遍历对象
 				Object.keys(res.for).forEach((key, index) => {
 					//克隆节点
-					let copyVn = this.clone(index, res, index, key)
+					let copyVn = this.clone(index)
 					//设置父节点
 					copyVn.parent = this.parent
+					//设置forData的值
+					copyVn.forData[res.item] = res.for[key]
+					copyVn.forData[res.index] = index
+					copyVn.forData[res.key] = key
 					//加入数组
-					cloneVnodes.push(copyVn)
+					cloneVNodes.push(copyVn)
 					//递归处理子节点的for指令
-					copyVn.children.forEach(childVnode => {
-						childVnode.dealFor(state)
+					copyVn.children.forEach(childVNode => {
+						childVNode.dealFor(state)
 					})
 				})
 			}
 			//删除该节点，添加克隆的节点
-			this.parent.children.splice(dex, 1, ...cloneVnodes)
+			this.parent.children.splice(dex, 1, ...cloneVNodes)
 		}
 		//该节点无需进行克隆处理，进行递归遍历子节点
 		else {
-			this.children.forEach(childVnode => {
-				childVnode.dealFor(state)
+			this.children.forEach(childVNode => {
+				childVNode.dealFor(state)
 			})
 		}
 	}
@@ -112,106 +116,114 @@ class VNode {
 	 */
 	init(state) {
 		//设置作用域
-		let scope = state._getOriginalData(state.$data)
+		let scope = util.getOriginalData(state.$data)
 		Object.assign(scope, this.getForData())
 		//元素节点进行初始化
-		if(this.nodeType == 1){
+		if (this.nodeType == 1) {
 			//if指令提取出来，单独作为if属性
 			if (this.directives['if']) {
 				//使用if时同时存在else-if、else则报错
-				if(this.directives['else-if'] || this.directives['else']){
+				if (this.directives['else-if'] || this.directives['else']) {
 					throw new Error('"@if" and "@else-if" and "@else" cannot be used on the same node')
 				}
 				//解析指令的表达式值
-				this.if = this.parseExpression(scope, this.directives['if'].exp)
+				this.if = util.parseExp(scope, this.directives['if'].exp)
 				//进行标记
-				this.useIf = true
+				this.ifType = 0
 				//从指令集合移除
 				delete this.directives['if']
 			}
-			
+
 			//else-if指令提取出来，单独作为if属性
-			if(this.directives['else-if']){
+			if (this.directives['else-if']) {
 				//使用else-if时同时存在else则报错
-				if(this.directives['else']){
+				if (this.directives['else']) {
 					throw new Error('"@else-if" and "@else" cannot be used on the same node')
 				}
 				//获取上一个兄弟节点
 				let brotherNode = this.getPrevBrotherNode()
 				//上一个兄弟节点不存在或者没有使用@if则直接报错
-				if(!brotherNode || !brotherNode.useIf){
+				if (!brotherNode || brotherNode.ifType != 0) {
 					throw new Error('"@else-if" cannot be used alone')
 				}
 				//上一个兄弟节点的if为true则不渲染
-				if(brotherNode.if){
+				if (brotherNode.if) {
 					this.if = false
-				}else {
+				} else {
 					//解析指令的表达式值
-					this.if = this.parseExpression(scope, this.directives['else-if'].exp)
+					this.if = util.parseExp(scope, this.directives['else-if'].exp)
 				}
 				//进行标记
-				this.useElseIf = true
+				this.ifType = 1
 				//从指令集合移除
 				delete this.directives['else-if']
 			}
-			
+
 			//else指令提取出来，单独作为if属性
-			if(this.directives['else']){
+			if (this.directives['else']) {
 				//获取上一个兄弟节点
 				let brotherNode = this.getPrevBrotherNode()
 				//上一个兄弟节点不存在或者没有使用@if和@else-if，则直接报错
-				if(!brotherNode || (!brotherNode.useIf && !brotherNode.useElseIf)){
+				if (!brotherNode || (brotherNode.ifType != 0 && brotherNode.ifType != 1)) {
 					throw new Error('"@else" cannot be used alone')
 				}
 				//上一个兄弟节点使用的是@if
-				if(brotherNode.useIf){
-					if(brotherNode.if){
+				if (brotherNode.ifType == 0) {
+					if (brotherNode.if) {
 						this.if = false
-					}else {
+					} else {
 						this.if = true
 					}
 				}
 				//上一个兄弟节点使用的是@else-if
-				else if(brotherNode.useElseIf){
+				else if (brotherNode.ifType == 1) {
 					//获取该节点的上一个兄弟节点
 					let brotherNode2 = brotherNode.getPrevBrotherNode()
 					//该节点的上一个兄弟节点没有使用@if直接报错
-					if(!brotherNode2 || !brotherNode2.useIf){
+					if (!brotherNode2 || brotherNode2.ifType != 0) {
 						throw new Error('"@else" cannot be used alone')
 					}
-					if(brotherNode.if || brotherNode2.if){
+					if (brotherNode.if || brotherNode2.if) {
 						this.if = false
-					}else {
+					} else {
 						this.if = true
 					}
 				}
 				//进行标记
-				this.useElse = true
+				this.ifType = 2
 				//从指令集合移除
 				delete this.directives['else']
 			}
-			
+
 			//解析其他指令
+			let directives = {}
 			for (let name in this.directives) {
+				//真实指令名称解析
+				let realName = util.parseText(scope, name)
 				//指令未定义报错
-				if (!state.$directives[name]) {
-					throw new Error(`The @${name} directive is undefined`)
+				if (!state.$directives[realName]) {
+					throw new Error(`The @${realName} directive is undefined`)
 				}
+				let modifier = {}
+				this.directives[name].modifier.forEach(mod=>{
+					modifier[mod] = true
+				})
 				//存储表达式对应的真实的值
-				this.directives[name] = {
-					exp:this.directives[name].exp,
-					modifier:this.directives[name].modifier,
-					value:this.parseExpression(scope, this.directives[name].exp)
+				directives[realName] = {
+					exp: this.directives[name].exp,
+					modifier: modifier,
+					value: util.parseExp(scope, this.directives[name].exp)
 				}
 			}
-			
+			this.directives = directives
+
 			//初始化属性
 			let attrs = {}
 			for (let attr in this.attrs) {
 				let realAttrName = ''
 				let realAttrValue = null
 				//真实属性名称解析
-				realAttrName = this.parseText(scope, attr)
+				realAttrName = util.parseText(scope, attr)
 				//判断属性值是否只是一对{{}}
 				let matchArray = this.attrs[attr].match(/^\{\{(.*?)\}\}$/g)
 				//一对{{}}
@@ -219,114 +231,121 @@ class VNode {
 					const endIndex = this.attrs[attr].trim().length - 2
 					const exp = this.attrs[attr].trim().substring(2, endIndex)
 					//解析成数据
-					realAttrValue = this.parseExpression(scope, exp)
-				}
-				else {
+					realAttrValue = util.parseExp(scope, exp)
+				} else {
 					//直接解析为字符串
-					realAttrValue = this.parseText(scope, this.attrs[attr])
+					realAttrValue = util.parseText(scope, this.attrs[attr])
 				}
 				//属性为空字符串的话，直接设为true
-				if(realAttrValue === ''){
+				if (realAttrValue === '') {
 					realAttrValue = true
 				}
 				attrs[realAttrName] = realAttrValue
 			}
 			this.attrs = attrs
-			
-			//初始化样式，此时this.cls为字符串
-			if(this.cls){
+
+			//初始化样式，此时this.classes为字符串
+			if (this.classes) {
 				//判断样式值是否只是一对{{}}
-				let clsMatchArray = this.cls.match(/^\{\{(.*?)\}\}$/g)
-				let cls = {}
+				let classMatchArray = this.classes.match(/^\{\{(.*?)\}\}$/g)
+				let classes = {}
 				//一对{{}}
-				if (clsMatchArray) {
-					const endIndex = this.cls.trim().length - 2
-					const exp = this.cls.trim().substring(2, endIndex)
+				if (classMatchArray) {
+					const endIndex = this.classes.trim().length - 2
+					const exp = this.classes.trim().substring(2, endIndex)
 					//解析成数据
-					let data = this.parseExpression(scope, exp)
+					let data = util.parseExp(scope, exp)
 					//如果是数组，转为对象
-					if(Array.isArray(data)){
-						data.forEach(item=>{
-							cls[item] = true
+					if (Array.isArray(data)) {
+						data.forEach(item => {
+							classes[item] = true
 						})
 					}
 					//如果是对象直接存储
-					else if(typeof data == 'object' && data){
-						cls = Object.assign({},data)
+					else if (typeof data == 'object' && data) {
+						classes = Object.assign({}, data)
 					}
 					//如果是字符串
-					else if(typeof data == 'string' && data){
-						cls[data] = true
+					else if (typeof data == 'string' && data) {
+						classes[data] = true
 					}
 				}
 				//其他情况
 				else {
 					//直接解析为字符串后以空格划分为数组，然后转为对象
-					this.parseText(scope, this.cls).split(/\s+/g).forEach(item=>{
-						cls[item] = true
+					util.parseText(scope, this.classes).split(/\s+/g).forEach(item => {
+						classes[item] = true
 					})
 				}
-				this.cls = cls
-			}else {
-				this.cls = {}
+				this.classes = classes
+			} else {
+				this.classes = {}
 			}
-			
+
 			//初始化事件
+			let events = {}
 			for (let eventName in this.events) {
-				this.events[eventName] = this.eventHandler(scope, eventName)
+				//真实事件名称解析
+				let realEventName = util.parseText(scope, eventName)
+				events[realEventName] = this.eventHandler(scope, realEventName, this.events[eventName].handler, this.events[eventName].modifier)
 			}
+			this.events = events
 		}
 		//文本节点初始化
-		else if(this.nodeType == 3){
-			this.text = this.parseText(scope, this.text)
+		else if (this.nodeType == 3) {
+			this.text = util.parseText(scope, this.text)
 		}
 		//递归对子节点进行初始化
-		this.children.forEach(childVnode => {
-			childVnode.init(state)
+		this.children.forEach(childVNode => {
+			childVNode.init(state)
 		})
 	}
-	
+
 	/**
 	 * 事件数据初始化，返回事件方法、修饰符和回调参数
-	 * @param {Object} scope 
+	 * @param {Object} scope
 	 * @param {String} eventName
+	 * @param {Function} handler 
+	 * @param {Array} modifier 
 	 */
-	eventHandler(scope, eventName) {
-		//定义处理函数
-		let handler = null
+	eventHandler(scope, eventName, handler, modifier) {
 		//定义回调参数
 		let params = []
-		//获取修饰符
-		let modifier = this.events[eventName].modifier
-		if(!this.events[eventName].handler){
+		let newHandler = null
+		if (!handler) {
 			throw new TypeError('The value of #' + eventName + ' shoud not be undefined')
 		}
 		//判断是否有参数
-		let res = /(.*)+\((.*)\)/g.exec(this.events[eventName].handler)
+		let res = /(.*)+\((.*)\)/g.exec(handler)
 		//有参数
 		if (res) {
 			//解析函数
-			handler = this.parseExpression(scope, res[1])
+			newHandler = util.parseExp(scope, res[1])
 			//获取参数
 			if (res[2]) {
 				params = res[2].split(',').map(value => {
-					return this.parseExpression(scope, value)
+					return util.parseExp(scope, value)
 				})
 			}
 		}
 		//无参数
 		else {
 			//解析函数
-			handler = this.parseExpression(scope, this.events[eventName].handler)
+			newHandler = util.parseExp(scope, handler)
 			//如果解析结果不是函数，则直接作为字符串带过去
-			if(typeof handler != 'function'){
-				handler = this.events[eventName].handler
+			if (typeof newHandler != 'function') {
+				newHandler = handler
 			}
 		}
+		//转换修饰符
+		let newModifier = {}
+		modifier.forEach(mod=>{
+			newModifier[mod] = true
+		})
 		return {
-			handler,
+			handler: newHandler,
 			params,
-			modifier
+			modifier:newModifier
 		}
 	}
 
@@ -341,14 +360,14 @@ class VNode {
 		if (state.$components[name]) {
 			//获取自定义属性
 			let props = {}
-			for(let key in this.attrs){
-				if(state.$components[name].props.includes(key)){
+			for (let key in this.attrs) {
+				if (state.$components[name].props.includes(key)) {
 					props[key] = this.attrs[key]
 					delete this.attrs[key]
 				}
 			}
 			//获取自定义组件的注册函数的返回值
-			let template = state.$components[name].render.apply(state.$data,[props])
+			let template = state.$components[name].render.apply(state.$data, [props])
 			//如果不返回任何值直接报错
 			if (!template) {
 				throw new Error('The template for component "' + name + '" is invalid')
@@ -365,7 +384,7 @@ class VNode {
 					throw new TypeError('The template for component "' + name + '" is invalid')
 				}
 				//调用state的_compile方法构建该元素的虚拟节点树
-				vnode = state._compile(this.id, el)
+				vnode = state._compile(this.uid, el)
 				//虚拟节点树的for循环处理
 				vnode.dealFor(state)
 				//初始化虚拟节点树
@@ -374,10 +393,10 @@ class VNode {
 			//如果是对象，则表示通过h函数创建组件
 			else if (typeof template == 'object') {
 				//创建一个虚拟节点，此时虚拟节点的数据都是初始化后的，无需再次初始化
-				vnode = new VNode(template.tag, template.attrs, template.cls, template.directives, template.events,
-					undefined, this.id, 1)
+				vnode = new VNode(this.uid, template.tag, 1, template.attrs, template.classes, template.directives,
+					template.events, undefined)
 				//创建其子节点
-				vnode.createChildrenVnodes(template)
+				vnode.createChildrenVNodes(template)
 				//设置虚拟节点是否渲染
 				vnode.if = template._if
 			}
@@ -392,9 +411,9 @@ class VNode {
 				//合并原节点和新建节点的指令集
 				vnode.directives = Object.assign(vnode.directives, this.directives)
 				//合并原节点和新建节点的样式类集
-				vnode.cls = Object.assign(vnode.cls, this.cls)
+				vnode.classes = Object.assign(vnode.classes, this.classes)
 				//合并非自定义属性的属性集
-				vnode.attrs = Object.assign(vnode.attrs,this.attrs)
+				vnode.attrs = Object.assign(vnode.attrs, this.attrs)
 				//插入当前节点的位置，并删除当前节点
 				let index = this.getIndex()
 				this.parent.children.splice(index, 1, vnode)
@@ -402,32 +421,32 @@ class VNode {
 		}
 		//非自定义组件则递归遍历子节点，进行相同的处理
 		else {
-			this.children.forEach(childVnode => {
-				childVnode.dealComponent(state)
+			this.children.forEach(childVNode => {
+				childVNode.dealComponent(state)
 			})
 		}
 	}
-	
+
 	/**
 	 * 根据template对象创建子节点
 	 * @param {Object} template
 	 */
-	createChildrenVnodes(template) {
+	createChildrenVNodes(template) {
 		//text属性明确不存在时，根据slots来创建子节点
 		if (template.text === undefined || template.text === null) {
 			template.slots.forEach((slot, i) => {
 				//创建一个已经初始化完毕的虚拟节点
-				let vnode = new VNode(slot.tag, slot.attrs, slot.cls, slot.directives, slot.events,
-					undefined, this.id + '_' + i, 1)
+				let vnode = new VNode(this.uid + '_' + i, slot.tag, 1, slot.attrs, slot.classes, slot
+					.directives, slot.events, undefined)
 				this.children.push(vnode)
-				vnode.createChildrenVnodes(slot)
+				vnode.createChildrenVNodes(slot)
 			})
 		}
 		//根据text创建子节点
 		else {
 			const textNode = document.createTextNode(template.text)
-			let vnode = new VNode(textNode.nodeName, {}, {}, {}, {}, template.text, this.id + '_0', textNode
-				.nodeType)
+			let vnode = new VNode(this.uid + '_0', textNode.nodeName, textNode.nodeType, {}, {}, {}, {}, template
+				.text)
 			this.children = [vnode]
 		}
 	}
@@ -439,7 +458,7 @@ class VNode {
 	 * @param {Boolean} handlerChildren 是否处理子节点指令，默认为true
 	 */
 	dealDirectives(state, hook, handlerChildren = true) {
-		//如果该节点为不渲染节点，直接返回
+		//如果该节点为不渲染的节点，直接返回
 		if (!this.if) {
 			return
 		}
@@ -474,8 +493,8 @@ class VNode {
 		}
 		//递归调用进行子节点指令处理
 		if (handlerChildren) {
-			this.children.forEach(childVnode => {
-				childVnode.dealDirectives(state, hook)
+			this.children.forEach(childVNode => {
+				childVNode.dealDirectives(state, hook)
 			})
 		}
 	}
@@ -496,14 +515,14 @@ class VNode {
 			//创建元素
 			el = document.createElement(this.tag)
 			//设置样式
-			let cls = []
-			for (let item in this.cls) {
-				if(this.cls[item]){
-					cls.push(item)
+			let classes = []
+			for (let item in this.classes) {
+				if (this.classes[item]) {
+					classes.push(item)
 				}
 			}
-			if(cls.length){
-				el.setAttribute('class', cls.join(' '))
+			if (classes.length) {
+				el.setAttribute('class', classes.join(' '))
 			}
 			//设置属性
 			for (let attr in this.attrs) {
@@ -527,32 +546,34 @@ class VNode {
 			}
 			//设置事件
 			for (let eventName in this.events) {
-				el.addEventListener(eventName, e=>{
+				const fun = e => {
 					//self修饰符
-					if(this.events[eventName].modifier && this.events[eventName].modifier.includes('self')){
-						if(e.currentTarget != e.target){
+					if (this.events[eventName].modifier['self']) {
+						if (e.currentTarget != e.target) {
 							return
 						}
 					}
 					//stop修饰符
-					if(this.events[eventName].modifier && this.events[eventName].modifier.includes('stop')){
+					if (this.events[eventName].modifier['stop']) {
 						e.stopPropagation()
 					}
 					//prevent修饰符
-					if(this.events[eventName].modifier && this.events[eventName].modifier.includes('prevent') && e.cancelable){
+					if (this.events[eventName].modifier['prevent'] && e.cancelable) {
 						e.preventDefault()
 					}
-					if(typeof this.events[eventName].handler == 'function'){
+					if (typeof this.events[eventName].handler == 'function') {
 						//事件回调参数第一个永远固定为event，后面则是定义的参数
 						this.events[eventName].handler.apply(state.$data, [e, ...this.events[eventName].params])
-					}else {
-						let h = this.executeExpression(state.$data,this.events[eventName].handler)
+					} else {
+						let h = util.executeExp(state.$data, this.events[eventName].handler)
 						h(state.$data)
 					}
-				},{
-					once:this.events[eventName].modifier && this.events[eventName].modifier.includes('once'),
-					capture:this.events[eventName].modifier && this.events[eventName].modifier.includes('capture'),
-					passive:this.events[eventName].modifier && this.events[eventName].modifier.includes('passive')
+				}
+				this.events[eventName].fun = fun
+				el.addEventListener(eventName, fun, {
+					once: this.events[eventName].modifier['once'] ? true :false,
+					capture: this.events[eventName].modifier['capture'] ? true :false,
+					passive: this.events[eventName].modifier['passive'] ? true :false
 				})
 			}
 			//遍历子节点
@@ -575,53 +596,12 @@ class VNode {
 	}
 
 	/**
-	 * 判断身为新旧节点的两个节点是否值得比较
-	 * @param {VNode} oldVNode
-	 */
-	isSame(oldVnode) {
-		return this.tag === oldVnode.tag && this.nodeType === oldVnode.nodeType && this.if === oldVnode.if && this.useIf === oldVnode.useIf
-		&& this.useElseIf === oldVnode.useElseIf && this.useElse === oldVnode.useElse
-	}
-
-	/**
-	 * 跟旧节点相比，获取指定字段新增、修改和移除的值
-	 * @param {VNode} oldVnode 旧虚拟节点
-	 * @param {String} key 指定字段，如attrs
-	 * @param {Number} type 0表示获取修改的，1表示新增的，2表示获取移除的 
-	 */
-	compare(oldVnode, key, type) {
-		let res = {}
-		if (type == 0) {
-			for (let item in this[key]) {
-				if (oldVnode[key].hasOwnProperty(item) && JSON.stringify(oldVnode[key][item]) !== JSON.stringify(this[key][item])) {
-					res[item] = this[key][item]
-				}
-			}
-		} else if (type == 1) {
-			for (let item in this[key]) {
-				if (!oldVnode[key].hasOwnProperty(item)) {
-					res[item] = this[key][item]
-				}
-			}
-		} else if (type == 2) {
-			for (let item in oldVnode[key]) {
-				//如果新节点没有
-				if (!this[key].hasOwnProperty(item)) {
-					res[item] = oldVnode[key][item]
-				}
-			}
-		}
-		return res
-	}
-
-	/**
 	 * 获取当前节点及父/祖先节点的forData
 	 */
-	getForData(){
-		let data = {}
-		Object.assign(data,this.forData)
-		if(this.parent){
-			Object.assign(data,this.parent.getForData())
+	getForData() {
+		let data = util.deepCopy(this.forData)
+		if (this.parent) {
+			Object.assign(data, this.parent.getForData())
 		}
 		return data
 	}
@@ -630,21 +610,19 @@ class VNode {
 	 * 复制该节点(只有新节点执行，且该新节点是已经初始化的节点)
 	 */
 	copy() {
-		let id = this.id
+		let uid = this.uid
 		let tag = this.tag
-		let directives = Object.assign({}, this.directives)
-		let attrs = Object.assign({}, this.attrs)
-		let cls = Object.assign({},this.cls)
-		let events = Object.assign({}, this.events)
-		let text = this.text
 		let nodeType = this.nodeType
-		let vnode = new VNode(tag, attrs, cls, directives, events, text, id, nodeType)
+		let attrs = util.deepCopy(this.attrs)
+		let classes = util.deepCopy(this.classes)
+		let directives = util.deepCopy(this.directives)
+		let events = util.deepCopy(this.events)
+		let text = this.text
+		let vnode = new VNode(uid, tag, nodeType, attrs, classes, directives, events, text)
 		vnode.if = this.if
 		vnode.isCloned = this.isCloned
-		vnode.forData = Object.assign({},this.forData)
-		vnode.useIf = this.useIf
-		vnode.useElseIf = this.useElseIf
-		vnode.useElse = this.useElse
+		vnode.forData = Object.assign({}, this.forData)
+		vnode.ifType = this.ifType
 		let children = []
 		//遍历子节点进行复制
 		for (let child of this.children) {
@@ -659,92 +637,43 @@ class VNode {
 
 	/**
 	 * 克隆一个节点(节点尚未初始化)
-	 * @param {Number} i 节点在父节点中的序列
-	 * @param {Object} res for循环的数据
 	 * @param {Number} index for循环克隆时的序列
-	 * @param {String} key for循环的key
 	 */
-	clone(i, res, index, key) {
-		let id = this.id + '_copy_' + i
+	clone(index) {
+		let uid = this.uid + '_copy_' + index
 		let tag = this.tag
-		let directives = Object.assign({}, this.directives)
-		let attrs = Object.assign({}, this.attrs)
-		let cls = this.cls
-		let events = Object.assign({}, this.events)
-		let text = this.text
 		let nodeType = this.nodeType
+		let attrs = util.deepCopy(this.attrs)
+		let classes = util.deepCopy(this.classes)
+		let directives = util.deepCopy(this.directives)
+		let events = util.deepCopy(this.events)
+		let text = this.text
 		//创建新节点
-		let vnode = new VNode(tag, attrs, cls, directives, events, text, id, nodeType)
+		let vnode = new VNode(uid, tag, nodeType, attrs, classes, directives, events, text)
 		//设置克隆属性
 		vnode.isCloned = true
-		//forData赋值
-		if (key) {
-			vnode.forData[res.item] = res.for[key]
-			vnode.forData[res.index] = index
-			vnode.forData[res.key] = key
-		} else {
-			vnode.forData[res.item] = res.for[index]
-			vnode.forData[res.index] = index
-		}
 		//克隆其子节点
 		let children = []
-		for (let k in this.children) {
-			let newChild = this.children[k].clone(k, res, index, key)
+		this.children.forEach((childVNode, i) => {
+			let newChild = childVNode.clone(i)
 			newChild.parent = vnode
 			children.push(newChild)
-		}
+		})
 		vnode.children = children
 		return vnode
 	}
 
 	/**
-	 * 判断当前节点与旧节点是否相等(只有新节点执行，且新旧节点都已经初始化)
-	 * @param {Object} oldVnode
-	 */
-	equal(oldVnode) {
-		if (this.id != oldVnode.id || this.tag != oldVnode.tag || this.nodeType != oldVnode.nodeType || this.if !=
-			oldVnode.if || this.isCloned != oldVnode.isCloned || this.useIf != oldVnode.useIf || this.useElseIf != oldVnode.useElseIf
-			|| this.useElse != oldVnode.useElse) {
-			return false
-		}
-		if (this.nodeType == 1) {
-			if (JSON.stringify(this.attrs) != JSON.stringify(oldVnode.attrs)) {
-				return false
-			}
-			if (JSON.stringify(this.cls) != JSON.stringify(oldVnode.cls)) {
-				return false
-			}
-			if (JSON.stringify(this.directives) != JSON.stringify(oldVnode.directives)) {
-				return false
-			}
-			if (JSON.stringify(this.events) != JSON.stringify(oldVnode.events)) {
-				return false
-			}
-			if (this.children.length != oldVnode.children.length) {
-				return false
-			}
-			return this.children.every((child, index) => {
-				return child.equal(oldVnode.children[index])
-			})
-		} else {
-			if (this.text != oldVnode.text) {
-				return false
-			}
-		}
-		return true
-	}
-
-	/**
 	 * 获取上一个兄弟元素节点
 	 */
-	getPrevBrotherNode(){
+	getPrevBrotherNode() {
 		//获取当前节点在父节点的位置
 		let index = this.getIndex()
-		if(index <= 0){
+		if (index <= 0) {
 			return null
 		}
-		let brotherNode = this.parent.children[index-1]
-		if(brotherNode.nodeType != 1){
+		let brotherNode = this.parent.children[index - 1]
+		if (brotherNode.nodeType != 1) {
 			brotherNode = brotherNode.getPrevBrotherNode()
 		}
 		return brotherNode
@@ -755,7 +684,7 @@ class VNode {
 	 */
 	getIndex() {
 		let index = -1
-		if(this.parent){
+		if (this.parent) {
 			let length = this.parent.children.length
 			for (let i = 0; i < length; i++) {
 				if (this.parent.children[i] === this) {
@@ -765,101 +694,6 @@ class VNode {
 			}
 		}
 		return index
-	}
-
-	/**
-	 * 解析for指令数据
-	 * @param {Object} scope
-	 * @param {String} expression
-	 */
-	parseFor(scope, expression) {
-		let match = expression.match(/([^]*?)\s+(?:in|of)\s+([^]*)/)
-		if (!match) {
-			return
-		}
-		const forObj = this.parseExpression(scope, match[2].trim())
-		let alias = match[1].trim().replace(/[\(\)]/g, '').trim().split(',')
-		let res = {
-			for: forObj,
-			item: alias[0].trim(),
-			exp:match[2].trim()
-		}
-		//遍历的是数组
-		if (Array.isArray(forObj)) {
-			if (alias.length > 1) {
-				res.index = alias[1].trim()
-			}else {
-				res.index = 'index'
-			}
-		}
-		//遍历对象
-		else if (typeof forObj == 'object' && forObj) {
-			if (alias.length > 1) {
-				res.key = alias[1].trim()
-			}else {
-				res.key = 'key'
-			}
-			if (alias.length > 2) {
-				res.index = alias[2].trim()
-			}else {
-				res.index = 'index'
-			}
-		}
-		return res
-	}
-
-	/**
-	 * 解析含{{}}字符串
-	 * @param {Object} scope
-	 * @param {String} text
-	 */
-	parseText(scope, text) {
-		return text.replace(/\{\{(.*?)\}\}/g, (match, expression) => {
-			let res = this.parseExpression(scope, expression.trim())
-			if (typeof res === 'object') {
-				return JSON.stringify(res)
-			}
-			return String(res)
-		})
-	}
-
-	/**
-	 * 解析字符串表达式，计算结果
-	 * @param {Object} scope 作用域对象
-	 * @param {String} expression 表达式字符串
-	 */
-	parseExpression(scope, expression) {
-		let code = ''
-		//动态生成变量声明代码
-		for (let key in scope) {
-			code += `let ${key} = scope['${key}'];`
-		}
-		code += `return ${expression}`
-		//在代码块的前后追加代码声明
-		let nf = new Function("scope", code)
-		//执行代码块并且返回结果
-		return nf(scope)
-	}
-	
-	/**
-	 * 返回事件指向的表达式字符串封装函数，用于事件值为表达式的情况
-	 * @param {Object} scope
-	 * @param {Object} expression
-	 */
-	executeExpression(scope, expression) {
-		let code = ''
-		//动态生成变量声明代码
-		for (let key in scope) {
-			code += `let ${key} = scope['${key}'];`
-		}
-		code += `${expression};`
-		for (let key in scope){
-			code += `scope['${key}'] = ${key};`
-		}
-		//在代码块的前后追加代码声明
-		let nf = new Function("scope", code)
-		//执行代码块并且返回结果
-		return nf
 	}
 }
 

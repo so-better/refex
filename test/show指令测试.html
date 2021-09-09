@@ -27,7 +27,8 @@
 		const { proxy, useProxy, h } = Refex
 		//构建响应式数据
 		const state = proxy({
-			show:false
+			show:false,
+			name:1
 		})
 		//拿到可直接操作的响应式对象
 		const snap = useProxy(state)

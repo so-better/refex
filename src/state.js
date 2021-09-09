@@ -1,5 +1,7 @@
+const util = require('./util')
 const VNode = require('./vnode')
 const customDirectives = require('./custom-directives')
+const customComponents = require('./custom-components')
 /**
  * 数据状态管理
  */
@@ -32,9 +34,13 @@ class State {
 	 * 初始化的一些处理
 	 */
 	_init() {
-		//注册一些指令
+		//注册一些内部指令
 		for(let name in customDirectives){
 			this.directive(name, customDirectives[name])
+		}
+		//注册一些内部组件
+		for(let name in customComponents){
+			this.component(name,customComponents[name])
 		}
 	}
 
@@ -167,7 +173,7 @@ class State {
 		//保存最早的el元素
 		this.$template = el.cloneNode(true)
 		//生成未初始化的虚拟节点
-		this.$vnode = this._compile('vnode', el)
+		this.$vnode = this._compile('v', el)
 		//处理for指令进行节点克隆
 		this.$vnode.dealFor(this)
 		//初始化虚拟节点，进行数据绑定赋值
@@ -195,10 +201,10 @@ class State {
 
 	/**
 	 * 将一个指定的元素及其子孙节点构造成一个虚拟dom树(此时虚拟dom未初始化数据)
-	 * @param {String} id id
+	 * @param {String} uid uid
 	 * @param {Node} el 目标元素
 	 */
-	_compile(id, el) {
+	_compile(uid, el) {
 		let vnode = null
 		//元素节点
 		if (el.nodeType == 1) {
@@ -209,38 +215,21 @@ class State {
 			//定义事件的集合
 			let events = {}
 			//定义样式类字段
-			let cls = ''
+			let classes = ''
 			//遍历该元素的所有属性
 			for (let item of el.attributes) {
 				//@开头解析为指令
 				if (item.nodeName.startsWith('@')) {
-					//查找修饰符的位置
-					let index = item.nodeName.indexOf(':')
-					//存在修饰符
-					if (index > 0) {
-						//指令名称
-						let directiveName = item.nodeName.substr(1, index - 1)
-						//修饰符字段
-						let modifier = item.nodeName.substr(index + 1)
-						//加入指令集合
-						if (directiveName) {
-							directives[directiveName] = {
-								modifier: modifier || undefined,
-								exp: item.nodeValue
-							}
-						}
-					}
-					//不存在修饰符
-					else {
-						//指令名称
-						let directiveName = item.nodeName.substr(1)
-						if (directiveName) {
-							//加入指令集合
-							directives[directiveName] = {
-								modifier: undefined,
-								exp: item.nodeValue
-							}
-						}
+					//可能存在修饰符
+					let res = item.nodeName.substr(1).split('.')
+					//获取指令名称
+					let directiveName = res[0]
+					//加入指令集合
+					directives[directiveName] = {
+						exp:item.nodeValue,
+						modifier: res.filter((item, index) => {
+							return index > 0
+						})
 					}
 				}
 				//#开头解析为事件
@@ -259,7 +248,7 @@ class State {
 				}
 				//样式class单独提取出来
 				else if (item.nodeName == 'class') {
-					cls = item.nodeValue.trim()
+					classes = item.nodeValue.trim()
 				}
 				//普通属性，忽略refx-cloak属性
 				else if (item.nodeName != 'refex-cloak') {
@@ -267,8 +256,7 @@ class State {
 				}
 			}
 			//创建虚拟节点
-			vnode = new VNode(el.nodeName.toLocaleLowerCase(), attrs, cls, directives, events, undefined, id, el
-				.nodeType)
+			vnode = new VNode(uid, el.nodeName.toLocaleLowerCase(), el.nodeType, attrs, classes, directives, events, undefined)
 			//获取目标元素子节点
 			let nodes = el.childNodes
 			//子节点长度
@@ -276,7 +264,7 @@ class State {
 			//遍历子节点
 			for (let i = 0; i < length; i++) {
 				//递归调用本方法进行子节点的创建
-				let vn = this._compile(id + '_' + i, nodes[i])
+				let vn = this._compile(uid + '_' + i, nodes[i])
 				//如果创建成功
 				if (vn) {
 					//设置父节点
@@ -289,7 +277,7 @@ class State {
 		//文本节点或者注释节点
 		else if (el.nodeType == 3 || el.nodeType == 8) {
 			//直接创建
-			vnode = new VNode(el.nodeName.toLocaleLowerCase(), {}, '', {}, {}, el.nodeValue, id, el.nodeType)
+			vnode = new VNode(uid, el.nodeName.toLocaleLowerCase(), el.nodeType, {}, '', {}, {}, el.nodeValue)
 		}
 		return vnode
 	}
@@ -300,9 +288,9 @@ class State {
 	 * @param {Object} newValue
 	 * @param {Object} oldValue
 	 */
-	_updateVnodes(key, newValue, oldValue) {
+	_updateVNodes(key, newValue, oldValue) {
 		//更新虚拟节点树
-		this.$vnode = this._compile('vnode', this.$template)
+		this.$vnode = this._compile('v', this.$template)
 		//处理for指令进行节点克隆
 		this.$vnode.dealFor(this)
 		//初始化节点树
@@ -310,58 +298,58 @@ class State {
 		//处理自定义组件的渲染
 		this.$vnode.dealComponent(this)
 		//新旧根节点比较
-		this._updateVnode(this.$vnode, this._vnode)
+		this._updateVNode(this.$vnode, this._vnode)
 	}
 
 	/**
 	 * 比较节点进行更新
-	 * @param {VNode} newVnode
-	 * @param {VNode} oldVnode
+	 * @param {VNode} newVNode
+	 * @param {VNode} oldVNode
 	 */
-	_updateVnode(newVnode, oldVnode) {
+	_updateVNode(newVNode, oldVNode) {
 		//如果这两个节点值得比较
-		if (newVnode.isSame(oldVnode)) {
+		if (util.isSameNode(newVNode,oldVNode)) {
 			//节点是否更新
-			let isUpdate = !newVnode.equal(oldVnode)
+			let isUpdate = !util.equalNode(newVNode,oldVNode)
 			//如果节点更新，先触发指令的beforeUpdate钩子函数
 			if (isUpdate) {
-				oldVnode.dealDirectives(this, 'beforeUpdate', false)
+				oldVNode.dealDirectives(this, 'beforeUpdate', false)
 			}
 			//元素节点
-			if (newVnode.nodeType == 1 && oldVnode.if) {
+			if (newVNode.nodeType == 1 && oldVNode.if) {
 				//更新指令
-				this._updateDirectives(newVnode, oldVnode)
+				this._updateDirectives(newVNode, oldVNode)
 				//更新属性
-				this._updateAttrs(newVnode, oldVnode)
+				this._updateAttrs(newVNode, oldVNode)
 				//更新样式类
-				this._updateClass(newVnode, oldVnode)
+				this._updateClasses(newVNode, oldVNode)
 				//更新事件
-				this._updateEvents(newVnode, oldVnode)
+				this._updateEvents(newVNode, oldVNode)
 				//子节点进行比较
-				this._updateChildren(newVnode, oldVnode)
+				this._updateChildren(newVNode, oldVNode)
 			}
 			//文本节点
-			else if (newVnode.nodeType == 3) {
+			else if (newVNode.nodeType == 3) {
 				//更新节点文字
-				this._updateText(newVnode, oldVnode)
+				this._updateText(newVNode, oldVNode)
 			}
 			//节点更新，触发指令的updated钩子函数
 			if (isUpdate) {
-				oldVnode.dealDirectives(this, 'updated', false)
+				oldVNode.dealDirectives(this, 'updated', false)
 			}
 		}
 		//直接替换
 		else {
 			//复制新节点
-			let vnode = newVnode.copy()
+			let vnode = newVNode.copy()
 			//获取父节点
-			let parent = oldVnode.parent
+			let parent = oldVNode.parent
 			//更新插入的节点的父节点
 			vnode.parent = parent
 			//触发自定义指令的beforeUnmount
-			oldVnode.dealDirectives(this, 'beforeUnmount')
+			oldVNode.dealDirectives(this, 'beforeUnmount')
 			//获取旧节点在父节点中的序列
-			let index = oldVnode.getIndex()
+			let index = oldVNode.getIndex()
 			//删除原来的旧节点，在原来的位置上插入新建的节点
 			parent.children.splice(index, 1, vnode)
 			//触发自定义指令的beforeMount
@@ -369,11 +357,11 @@ class State {
 			//渲染该节点
 			vnode.render(this)
 			//将节点元素插入原来的位置
-			oldVnode.elm.parentNode.insertBefore(vnode.elm, oldVnode.elm)
+			oldVNode.elm.parentNode.insertBefore(vnode.elm, oldVNode.elm)
 			//删除原来的dom元素
-			oldVnode.elm.remove()
+			oldVNode.elm.remove()
 			//触发自定义指令的unmounted
-			oldVnode.dealDirectives(this, 'unmounted')
+			oldVNode.dealDirectives(this, 'unmounted')
 			//触发自定义指令的mounted
 			vnode.dealDirectives(this, 'mounted')
 		}
@@ -381,43 +369,43 @@ class State {
 
 	/**
 	 * 更新指令
-	 * @param {VNode} newVnode
-	 * @param {VNode} oldVnode
+	 * @param {VNode} newVNode
+	 * @param {VNode} oldVNode
 	 */
-	_updateDirectives(newVnode, oldVnode) {
+	_updateDirectives(newVNode, oldVNode) {
 		//获取新增或者修改的指令
-		let a = newVnode.compare(oldVnode, 'directives', 0)
-		let b = newVnode.compare(oldVnode, 'directives', 1)
+		let a = util.compare(newVNode, oldVNode, 'directives', 0)
+		let b = util.compare(newVNode, oldVNode, 'directives', 1)
 		let updateDirectives = Object.assign(a, b)
 		//进行更新操作
 		for (let d in updateDirectives) {
-			oldVnode.directives[d] = Object.assign({}, updateDirectives[d])
+			oldVNode.directives[d] = Object.assign({}, updateDirectives[d])
 		}
 		//获取移除的指令
-		let removeDirectives = newVnode.compare(oldVnode, 'directives', 2)
+		let removeDirectives = util.compare(newVNode, oldVNode, 'directives', 2)
 		//进行移除操作
 		for (let d in removeDirectives) {
-			delete oldVnode.directives[d]
+			delete oldVNode.directives[d]
 		}
 	}
 
 	/**
 	 * 更新属性
-	 * @param {VNode} newVnode
-	 * @param {VNode} oldVnode
+	 * @param {VNode} newVNode
+	 * @param {VNode} oldVNode
 	 */
-	_updateAttrs(newVnode, oldVnode) {
+	_updateAttrs(newVNode, oldVNode) {
 		//获取新增或者修改的属性
-		let a = newVnode.compare(oldVnode, 'attrs', 0)
-		let b = newVnode.compare(oldVnode, 'attrs', 1)
+		let a = util.compare(newVNode, oldVNode, 'attrs', 0)
+		let b = util.compare(newVNode, oldVNode, 'attrs', 1)
 		let updateAttrs = Object.assign(a, b)
 		//进行更新操作
 		for (let attr in updateAttrs) {
 			let val = updateAttrs[attr]
-			oldVnode.attrs[attr] = val
+			oldVNode.attrs[attr] = val
 			//val是false、null、undefined则移除属性
 			if (val === false || val === null || val === undefined) {
-				oldVnode.elm.removeAttribute(attr)
+				oldVNode.elm.removeAttribute(attr)
 			}
 			//否则设置属性值
 			else {
@@ -432,133 +420,134 @@ class State {
 				//其他情况直接转字符串
 				val = String(val)
 				//设置属性
-				oldVnode.elm.setAttribute(attr, val)
+				oldVNode.elm.setAttribute(attr, val)
 			}
 		}
 		//获取移除的属性
-		let removeAttrs = newVnode.compare(oldVnode, 'attrs', 2)
+		let removeAttrs = util.compare(newVNode, oldVNode, 'attrs', 2)
 		//进行移除操作
 		for (let attr in removeAttrs) {
-			delete oldVnode.attrs[attr]
-			oldVnode.elm.removeAttribute(attr)
+			delete oldVNode.attrs[attr]
+			oldVNode.elm.removeAttribute(attr)
 		}
 	}
 
 	/**
 	 * 更新样式类
-	 * @param {VNode} newVnode
-	 * @param {VNode} oldVnode
+	 * @param {VNode} newVNode
+	 * @param {VNode} oldVNode
 	 */
-	_updateClass(newVnode, oldVnode) {
+	_updateClasses(newVNode, oldVNode) {
 		//样式发生了变化
-		if (JSON.stringify(newVnode.cls) != JSON.stringify(oldVnode.cls)) {
-			oldVnode.cls = Object.assign({}, newVnode.cls)
-			let cls = []
-			for (let item in oldVnode.cls) {
-				if (oldVnode.cls[item]) {
-					cls.push(item)
+		if (util.string(newVNode.classes) != util.string(oldVNode.classes)) {
+			oldVNode.classes = util.deepCopy(newVNode.classes)
+			let classes = []
+			for (let item in oldVNode.classes) {
+				if (oldVNode.classes[item]) {
+					classes.push(item)
 				}
 			}
-			if (cls.length) {
-				oldVnode.elm.setAttribute('class', cls.join(' '))
+			if (classes.length) {
+				oldVNode.elm.setAttribute('class', classes.join(' '))
 			} else {
-				oldVnode.elm.removeAttribute('class')
+				oldVNode.elm.removeAttribute('class')
 			}
 		}
 	}
 
 	/**
 	 * 更新事件
-	 * @param {VNode} newVnode
-	 * @param {VNode} oldVnode
+	 * @param {VNode} newVNode
+	 * @param {VNode} oldVNode
 	 */
-	_updateEvents(newVnode, oldVnode) {
+	_updateEvents(newVNode, oldVNode) {
 		//获取修改的事件
-		let updateEvents = newVnode.compare(oldVnode, 'events', 0)
+		let updateEvents = util.compare(newVNode, oldVNode, 'events', 0)
 		for (let eventName in updateEvents) {
-			oldVnode.events[eventName] = updateEvents[eventName]
+			oldVNode.events[eventName] = util.deepCopy(updateEvents[eventName])
 		}
 		//获取新增的事件
-		let addEvents = newVnode.compare(oldVnode, 'events', 1)
+		let addEvents = util.compare(newVNode, oldVNode, 'events', 1)
 		for (let eventName in addEvents) {
-			oldVnode.events[eventName] = addEvents[eventName]
-			oldVnode.elm.addEventListener(eventName, e => {
+			oldVNode.events[eventName] = util.deepCopy(addEvents[eventName])
+			const fun = e=>{
 				//self修饰符
-				if (oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes(
-						'self')) {
+				if (oldVNode.events[eventName].modifier['self']) {
 					if (e.currentTarget != e.target) {
 						return
 					}
 				}
 				//stop修饰符
-				if (oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes(
-						'stop')) {
+				if (oldVNode.events[eventName].modifier['stop']) {
 					e.stopPropagation()
 				}
 				//prevent修饰符
-				if (oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes(
-						'prevent') && e.cancelable) {
+				if (oldVNode.events[eventName].modifier['prevent'] && e.cancelable) {
 					e.preventDefault()
 				}
 				//执行事件函数
-				if (typeof oldVnode.events[eventName].handler == 'function') {
+				if (typeof oldVNode.events[eventName].handler == 'function') {
 					//事件回调参数第一个永远固定为event，后面则是定义的参数
-					oldVnode.events[eventName].handler.apply(this.$data, [e, ...oldVnode.events[eventName]
-						.params
-					])
+					oldVNode.events[eventName].handler.apply(this.$data, [e, ...oldVNode.events[eventName].params])
 				} else {
-					let h = oldVnode.executeExpression(this.$data, oldVnode.events[eventName].handler)
+					let h = util.executeExp(this.$data, oldVNode.events[eventName].handler)
 					h(this.$data)
 				}
-			}, {
-				once: oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier.includes(
-					'once'),
-				capture: oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier
-					.includes('capture'),
-				passive: oldVnode.events[eventName].modifier && oldVnode.events[eventName].modifier
-					.includes('passive')
+			}
+			oldVNode.events[eventName].fun = fun
+			oldVNode.elm.addEventListener(eventName, fun, {
+				once: oldVNode.events[eventName].modifier['once'] ? true :false,
+				capture: oldVNode.events[eventName].modifier['capture'] ? true :false,
+				passive: oldVNode.events[eventName].modifier['passive'] ? true :false
 			})
+		}
+		//获取移除的事件
+		let removeEvents = util.compare(newVNode, oldVNode,'events',2)
+		//进行移除操作
+		for (let eventName in removeEvents) {
+			oldVNode.elm.removeEventListener(eventName,oldVNode.events[eventName].fun)
+			delete oldVNode.events[eventName]
 		}
 	}
 
 	/**
 	 * 更新子节点
-	 * @param {VNode} newVnode
-	 * @param {VNode} oldVnode
+	 * @param {VNode} newVNode
+	 * @param {VNode} oldVNode
 	 */
-	_updateChildren(newVnode, oldVnode) {
+	_updateChildren(newVNode, oldVNode) {
 		//子节点数目一致
-		if (newVnode.children.length == oldVnode.children.length) {
+		if (newVNode.children.length == oldVNode.children.length) {
 			//递归比较子节点
-			for (let nchild of newVnode.children) {
-				for (let ochild of oldVnode.children) {
-					//新旧节点树中只有同等id的节点才会被比较
-					if (nchild.id === ochild.id) {
-						this._updateVnode(nchild, ochild)
+			for (let nchild of newVNode.children) {
+				for (let ochild of oldVNode.children) {
+					//新旧节点树中只有同等uid的节点才会被比较
+					if (nchild.uid === ochild.uid) {
+						this._updateVNode(nchild, ochild)
 					}
 				}
 			}
 		}
 		//子节点数目不一致，直接更新子节点数组，并且更新dom
 		else {
-			oldVnode.children.forEach(childVnode => {
+			oldVNode.children.forEach(childVNode => {
 				//触发自定义指令的beforeMount
-				childVnode.dealDirectives(this, 'beforeUnmount')
+				childVNode.dealDirectives(this, 'beforeUnmount')
 			})
-			oldVnode.elm.innerHTML = ''
-			oldVnode.children.forEach(childVnode => {
+			oldVNode.elm.innerHTML = ''
+			oldVNode.children.forEach(childVNode => {
 				//触发自定义指令的unmounted
-				childVnode.dealDirectives(this, 'unmounted')
+				childVNode.dealDirectives(this, 'unmounted')
 			})
-			oldVnode.children = []
-			newVnode.children.forEach(childVnode => {
-				let copyChild = childVnode.copy()
-				oldVnode.children.push(copyChild)
+			oldVNode.children = []
+			newVNode.children.forEach(childVNode => {
+				let copyChild = childVNode.copy()
+				oldVNode.children.push(copyChild)
 				//触发自定义指令的beforeMount
 				copyChild.dealDirectives(this, 'beforeMount')
 				copyChild.render(this)
 				//插入元素
-				oldVnode.elm.appendChild(copyChild.elm)
+				oldVNode.elm.appendChild(copyChild.elm)
 				//触发自定义指令的mounted
 				copyChild.dealDirectives(this, 'mounted')
 			})
@@ -567,13 +556,13 @@ class State {
 
 	/**
 	 * 更新文字
-	 * @param {VNode} newVnode
-	 * @param {VNode} oldVnode
+	 * @param {VNode} newVNode
+	 * @param {VNode} oldVNode
 	 */
-	_updateText(newVnode, oldVnode) {
-		if (newVnode.text !== oldVnode.text) {
-			oldVnode.text = newVnode.text
-			oldVnode.elm.nodeValue = oldVnode.text
+	_updateText(newVNode, oldVNode) {
+		if (newVNode.text !== oldVNode.text) {
+			oldVNode.text = newVNode.text
+			oldVNode.elm.nodeValue = oldVNode.text
 		}
 	}
 
@@ -601,7 +590,7 @@ class State {
 			handler = function() {}
 		}
 		//将监听属性字符串解析成特定形式的新字符串作为key
-		const key = this._parseProperty(property)
+		const key = util.parseProperty(property).join('.')
 		//特定属性的监听已存在
 		if (this.$watchers[key]) {
 			throw new Error('The watcher for "' + property + '" is already defined')
@@ -620,7 +609,7 @@ class State {
 		//解除该属性监听
 		if (typeof property == 'string') {
 			//将监听属性字符串解析生成点间隔符的新字符串作为存储监听器的key
-			const key = this._parseProperty(property)
+			const key = util.parseProperty(property).join('.')
 			//如果存在该key的监听器则进行移除
 			if (this.$watchers[key]) {
 				delete this.$watchers[key]
@@ -642,7 +631,7 @@ class State {
 	 */
 	_toProxy(parentKeys, data, parentKey) {
 		let keys = [...parentKeys]
-		if (!this._isObject(data)) {
+		if (!util.isObject(data)) {
 			throw new TypeError('Cannot create proxy with a non-object as target or handler')
 		}
 		if (parentKey) {
@@ -651,7 +640,7 @@ class State {
 		//遍历data的属性
 		for (let key in data) {
 			//属性值为对象的则再次转为proxy对象
-			if (this._isObject(data[key])) {
+			if (util.isObject(data[key])) {
 				data[key] = this._toProxy(keys, data[key], key)
 			}
 		}
@@ -713,7 +702,7 @@ class State {
 				this.onBeforeUpdate.apply(this.$data, [property, value, oldValue, target])
 			}
 			//更新虚拟节点
-			this._updateVnodes(keys, value, oldValue)
+			this._updateVNodes(keys, value, oldValue)
 			//针对修改对象或者数组内部元素，触发对数组或者对象的监听
 			const key1 = parentKeys.join('.')
 			if (oldTarget && parentKeys.length && this.$watchers[key1]) {
@@ -730,62 +719,6 @@ class State {
 			}
 		}
 		return true
-	}
-
-	/**
-	 * 解析指定的监听属性字符串为特定格式字符串
-	 * @param {String} property 解析的属性字符串
-	 */
-	_parseProperty(property) {
-		let properties = []
-		property.split('.').forEach(prop => {
-			const matchArray = prop.match(/\[(.+?)\]/g)
-			if (matchArray) {
-				let newProp = prop.replace(/\[(.+?)\]/g, '')
-				properties.push(newProp)
-				matchArray.forEach(match => {
-					properties.push(match.substr(1, match.length - 2))
-				})
-			} else {
-				properties.push(prop)
-			}
-		})
-		return properties.join('.')
-	}
-
-	/**
-	 * 判断数据是否为对象
-	 * @param {Object} data
-	 */
-	_isObject(data) {
-		if (typeof data == 'object' && data) {
-			return true
-		}
-		return false
-	}
-	
-	/**
-	 * 获取原始对象
-	 * @param {Object} data
-	 */
-	_getOriginalData(data){
-		let res = null
-		if(Array.isArray(data)){
-			res = []
-			for(let item of data){
-				let el = this._getOriginalData(item)
-				res.push(el)
-			}
-		}else if(this._isObject(data)){
-			res = {}
-			for(let key in data){
-				let el = this._getOriginalData(data[key])
-				res[key] = el
-			}
-		}else {
-			res = data
-		}
-		return res
 	}
 
 }
