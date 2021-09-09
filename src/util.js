@@ -1,5 +1,44 @@
 module.exports = {
 	/**
+	 * 解析字符串表达式，计算结果（与parseExp的区别是parseExp2会自动执行函数，返回函数值）
+	 * @param {Object} thisArg
+	 * @param {Object} scope
+	 * @param {String} exp
+	 */
+	parseExp2(thisArg,scope,exp){
+		let val = ''
+		let params = []
+		//判断是否为带括号的函数
+		let res = /(.*)+\((.*)\)/g.exec(exp)
+		//带括号
+		if (res) {
+			//解析
+			val = this.parseExp(scope, res[1])
+			//获取参数
+			if (res[2]) {
+				params = res[2].split(',').map(value => {
+					return this.parseExp(scope, value)
+				})
+			}
+			//如果解析结果不是函数
+			if(typeof val != 'function'){
+				throw new TypeError(`${res[1]} is not a function`)
+			}
+			val = val.apply(thisArg,params)
+		}
+		//无参数
+		else {
+			//解析
+			val = this.parseExp(scope, exp)
+			//如果解析结果是函数
+			if (typeof val == 'function') {
+				val = val.apply(thisArg,params)
+			}
+		}
+		return val
+	},
+	
+	/**
 	 * 新旧节点相比，获取指定字段新增、修改和移除的值
 	 * @param {VNode} newVNode 新节点
 	 * @param {VNode} oldVNode 旧节点
@@ -70,10 +109,11 @@ module.exports = {
 	
 	/**
 	 * 解析for指令数据
-	 * @param {Object} scope 作用域
-	 * @param {String} exp 表达式字符串
+	 * @param {Object} thisArg
+	 * @param {Object} scope
+	 * @param {String} exp
 	 */
-	parseFor(scope, exp) {
+	parseFor(thisArg, scope, exp) {
 		let match = exp.match(/([^]*?)\s+(?:in|of)\s+([^]*)/)
 		if (!match) {
 			return
@@ -135,12 +175,13 @@ module.exports = {
 	
 	/**
 	 * 解析含{{}}字符串，返回解析后的字符串
-	 * @param {Object} scope 表达式字符串
-	 * @param {String} text 字符串
+	 * @param {Object} thisArg 
+	 * @param {Object} scope 
+	 * @param {String} text 
 	 */
-	parseText(scope, text) {
+	parseText(thisArg,scope, text) {
 		return text.replace(/\{\{(.*?)\}\}/g, (match, exp) => {
-			let res = this.parseExp(scope, exp.trim())
+			let res = this.parseExp2(thisArg, scope, exp.trim())
 			return this.string(res)
 		})
 	},

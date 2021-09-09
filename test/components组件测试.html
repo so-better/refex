@@ -67,7 +67,7 @@
 			</div>
 			<div class="area">
 				<div>component内部组件</div>
-				<component name="my-buttons" props="{{props}}"></component>
+				<component name="my-buttons" props="{{ {primary:primary} }}"></component>
 			</div>
 			<div class="area">
 				<button #click="change">点击改变primary的值</button>
@@ -85,11 +85,8 @@
 		//构建响应式数据
 		const state = proxy({
 			primary:false,
-			props:{
-				primary:false
-			},
 			change:function(){
-				this.props.primary = !this.props.primary
+				this.primary = !this.primary
 			}
 		})
 		//拿到可直接操作的响应式对象

@@ -50,7 +50,7 @@ class VNode {
 			let scope = util.getOriginalData(state.$data)
 			Object.assign(scope, this.getForData())
 			//解析for指令表达式
-			const res = util.parseFor(scope, exp)
+			const res = util.parseFor(state.$data, scope, exp)
 			//表达式不合法
 			if (!res) {
 				throw new Error(`Invalid @for expression: ${exp}`)
@@ -127,7 +127,7 @@ class VNode {
 					throw new Error('"@if" and "@else-if" and "@else" cannot be used on the same node')
 				}
 				//解析指令的表达式值
-				this.if = util.parseExp(scope, this.directives['if'].exp)
+				this.if = util.parseExp2(state.$data, scope, this.directives['if'].exp)
 				//进行标记
 				this.ifType = 0
 				//从指令集合移除
@@ -151,7 +151,7 @@ class VNode {
 					this.if = false
 				} else {
 					//解析指令的表达式值
-					this.if = util.parseExp(scope, this.directives['else-if'].exp)
+					this.if = util.parseExp2(state.$data, scope, this.directives['else-if'].exp)
 				}
 				//进行标记
 				this.ifType = 1
@@ -199,7 +199,7 @@ class VNode {
 			let directives = {}
 			for (let name in this.directives) {
 				//真实指令名称解析
-				let realName = util.parseText(scope, name)
+				let realName = util.parseText(state.$data, scope, name)
 				//指令未定义报错
 				if (!state.$directives[realName]) {
 					throw new Error(`The @${realName} directive is undefined`)
@@ -212,7 +212,7 @@ class VNode {
 				directives[realName] = {
 					exp: this.directives[name].exp,
 					modifier: modifier,
-					value: util.parseExp(scope, this.directives[name].exp)
+					value: util.parseExp2(state.$data, scope, this.directives[name].exp)
 				}
 			}
 			this.directives = directives
@@ -223,18 +223,20 @@ class VNode {
 				let realAttrName = ''
 				let realAttrValue = null
 				//真实属性名称解析
-				realAttrName = util.parseText(scope, attr)
-				//判断属性值是否只是一对{{}}
-				let matchArray = this.attrs[attr].match(/^\{\{(.*?)\}\}$/g)
+				realAttrName = util.parseText(state.$data, scope, attr)
+				//获取{{}}解析结果的个数
+				let matchArray = this.attrs[attr].match(/\{\{(.*?)\}\}/g)
+				//属性值是否都是在{{}}内
+				let matchArray2 = this.attrs[attr].match(/^\{\{(.*?)\}\}$/g)
 				//一对{{}}
-				if (matchArray) {
+				if (matchArray && matchArray2 && matchArray.length == 1) {
 					const endIndex = this.attrs[attr].trim().length - 2
 					const exp = this.attrs[attr].trim().substring(2, endIndex)
 					//解析成数据
-					realAttrValue = util.parseExp(scope, exp)
+					realAttrValue = util.parseExp2(state.$data, scope, exp)
 				} else {
 					//直接解析为字符串
-					realAttrValue = util.parseText(scope, this.attrs[attr])
+					realAttrValue = util.parseText(state.$data, scope, this.attrs[attr])
 				}
 				//属性为空字符串的话，直接设为true
 				if (realAttrValue === '') {
@@ -246,15 +248,15 @@ class VNode {
 
 			//初始化样式，此时this.classes为字符串
 			if (this.classes) {
-				//判断样式值是否只是一对{{}}
-				let classMatchArray = this.classes.match(/^\{\{(.*?)\}\}$/g)
 				let classes = {}
-				//一对{{}}
-				if (classMatchArray) {
+				//判断样式值是否只是一对{{}}
+				let matchArray = this.classes.match(/\{\{(.*?)\}\}/g)
+				let matchArray2 = this.classes.match(/^\{\{(.*?)\}\}$/g)
+				if (matchArray && matchArray2 && matchArray.length == 1) {
 					const endIndex = this.classes.trim().length - 2
 					const exp = this.classes.trim().substring(2, endIndex)
 					//解析成数据
-					let data = util.parseExp(scope, exp)
+					let data = util.parseExp2(state.$data, scope, exp)
 					//如果是数组，转为对象
 					if (Array.isArray(data)) {
 						data.forEach(item => {
@@ -265,15 +267,16 @@ class VNode {
 					else if (typeof data == 'object' && data) {
 						classes = Object.assign({}, data)
 					}
-					//如果是字符串
-					else if (typeof data == 'string' && data) {
+					//其他
+					else {
+						data = util.string(data)
 						classes[data] = true
 					}
 				}
 				//其他情况
 				else {
 					//直接解析为字符串后以空格划分为数组，然后转为对象
-					util.parseText(scope, this.classes).split(/\s+/g).forEach(item => {
+					util.parseText(state.$data, scope, this.classes).split(/\s+/g).forEach(item => {
 						classes[item] = true
 					})
 				}
@@ -286,14 +289,14 @@ class VNode {
 			let events = {}
 			for (let eventName in this.events) {
 				//真实事件名称解析
-				let realEventName = util.parseText(scope, eventName)
+				let realEventName = util.parseText(state.$data, scope, eventName)
 				events[realEventName] = this.eventHandler(scope, realEventName, this.events[eventName].handler, this.events[eventName].modifier)
 			}
 			this.events = events
 		}
 		//文本节点初始化
 		else if (this.nodeType == 3) {
-			this.text = util.parseText(scope, this.text)
+			this.text = util.parseText(state.$data, scope, this.text)
 		}
 		//递归对子节点进行初始化
 		this.children.forEach(childVNode => {
@@ -475,7 +478,7 @@ class VNode {
 			//获取表达式
 			let exp = this.directives[name].exp
 			//获取修饰符
-			let modifier = this.directives[name].modifier
+			let modifier = util.deepCopy(this.directives[name].modifier)
 			//获取值
 			let value = this.directives[name].value
 			//beforeMount和unmounted钩子函数的回调参数无el元素

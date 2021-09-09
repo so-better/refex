@@ -17,7 +17,7 @@
 		<div id="app" refex-cloak>
 			<div class="area">
 				<button type="button" #click="show=!show">{{show?'隐藏':'显示'}}</button>
-				<button type="button" @show="show">Button</button>
+				<button type="button" @show="call">Button</button>
 			</div>
 		</div>
 	</body>
@@ -28,7 +28,9 @@
 		//构建响应式数据
 		const state = proxy({
 			show:false,
-			name:1
+			call:function(){
+				return this.show
+			}
 		})
 		//拿到可直接操作的响应式对象
 		const snap = useProxy(state)
