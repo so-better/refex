@@ -51,7 +51,7 @@
 		<div id="app" refex-cloak>
 			<div class="area">
 				<div>使用HTML字符串实现自定义组件</div>
-				<my-component primary="{{primary}}"></my-component>
+				<my-component>22222</my-component>
 			</div>
 			<div class="area">
 				<div>使用h函数实现自定义组件</div>
@@ -94,7 +94,7 @@
 
 		state.component('my-component', {
 			render: function(props) {
-				return `<my-buttons primary="{{${props.primary}}}"></my-buttons>`
+				return `<div class="my-component">这是一个自定义组件</div>`
 			}
 		})
 

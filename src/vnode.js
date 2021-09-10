@@ -380,12 +380,8 @@ class VNode {
 			if (typeof template == 'string') {
 				let div = document.createElement('div')
 				div.innerHTML = template.trim()
-				//只取第一个节点作为组件根元素
-				let el = div.childNodes[0]
-				//只能创建元素节点
-				if (el.nodeType != 1) {
-					throw new TypeError('The template for component "' + name + '" is invalid')
-				}
+				//取第一个元素节点作为组件根元素
+				let el = util.getFirstElement(div)
 				//调用state的_compile方法构建该元素的虚拟节点树
 				vnode = state._compile(this.uid, el)
 				//虚拟节点树的for循环处理
@@ -447,9 +443,7 @@ class VNode {
 		}
 		//根据text创建子节点
 		else {
-			const textNode = document.createTextNode(template.text)
-			let vnode = new VNode(this.uid + '_0', textNode.nodeName, textNode.nodeType, {}, {}, {}, {}, template
-				.text)
+			let vnode = new VNode(this.uid + '_0', '#text', 3, {}, {}, {}, {}, util.string(template.text))
 			this.children = [vnode]
 		}
 	}

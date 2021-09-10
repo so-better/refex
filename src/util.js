@@ -1,5 +1,23 @@
 module.exports = {
 	/**
+	 * 获取某个元素的第一个子节点
+	 * @param {Element} el 
+	 */
+	getFirstElement(el){
+		let childNodes = el.childNodes
+		let length = childNodes.length
+		let i = 0
+		let ele = childNodes[i]
+		while(ele && ele.nodeType != 1){
+			i++
+			if(i<length){
+				ele = childNodes[i]
+			}
+		}
+		return ele
+	},
+	
+	/**
 	 * 解析字符串表达式，计算结果（与parseExp的区别是parseExp2会自动执行函数，返回函数值）
 	 * @param {Object} thisArg
 	 * @param {Object} scope
