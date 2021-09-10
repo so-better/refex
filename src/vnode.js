@@ -375,6 +375,9 @@ class VNode {
 			if(name == 'slot'){
 				//获取slot父节点的componentChildren
 				let componentChildren = this.getComponentChildren()
+				if(!componentChildren){
+					throw new TypeError('Slot components cannot be used outside of custom components')
+				}
 				//插入slot节点的位置，并删除slot节点
 				let index = this.getIndex()
 				this.parent.children.splice(index, 1, ...componentChildren)
@@ -703,8 +706,10 @@ class VNode {
 	getComponentChildren(){
 		if(this.componentChildren.length){
 			return this.componentChildren
-		}else {
+		}else if(this.parent){
 			return this.parent.getComponentChildren()
+		}else {
+			return null
 		}
 	}
 
