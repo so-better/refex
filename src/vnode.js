@@ -405,8 +405,6 @@ class VNode {
 			}
 			//当虚拟节点创建完毕
 			if (vnode) {
-				//递归进行组件渲染
-				vnode.dealComponent(state)
 				//设置父节点
 				vnode.parent = this.parent
 				//合并原节点和新建节点的事件集
@@ -420,6 +418,8 @@ class VNode {
 				//插入当前节点的位置，并删除当前节点
 				let index = this.getIndex()
 				this.parent.children.splice(index, 1, vnode)
+				//递归进行组件渲染
+				vnode.dealComponent(state)
 			}
 		}
 		//非自定义组件则递归遍历子节点，进行相同的处理

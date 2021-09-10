@@ -12,8 +12,8 @@
 				padding: 10px;
 				border-bottom: 1px solid #ddd;
 			}
-			
-			.my-component{
+
+			.my-component {
 				display: flex;
 				justify-content: center;
 				align-items: center;
@@ -22,8 +22,8 @@
 				color: #fff;
 				font-size: 14px;
 			}
-			
-			.btn{
+
+			.btn {
 				display: inline-flex;
 				justify-content: center;
 				align-items: center;
@@ -36,13 +36,13 @@
 				background-color: #fff;
 				cursor: pointer;
 			}
-			
-			.btn-primary{
+
+			.btn-primary {
 				background-color: #109a82;
 				color: #fff;
 			}
-			
-			.btns>.btn+.btn{
+
+			.btns>.btn+.btn {
 				margin-left: 10px;
 			}
 		</style>
@@ -51,7 +51,7 @@
 		<div id="app" refex-cloak>
 			<div class="area">
 				<div>使用HTML字符串实现自定义组件</div>
-				<my-component></my-component>
+				<my-component primary="{{primary}}"></my-component>
 			</div>
 			<div class="area">
 				<div>使用h函数实现自定义组件</div>
@@ -84,64 +84,64 @@
 		} = Refex
 		//构建响应式数据
 		const state = proxy({
-			primary:false,
-			change:function(){
+			primary: false,
+			change: function() {
 				this.primary = !this.primary
 			}
 		})
 		//拿到可直接操作的响应式对象
 		const snap = useProxy(state)
-		
-		state.component('my-component',{
-			render:function(props){
-				return `<div class="my-component">这是一个my-component组件</div>`
+
+		state.component('my-component', {
+			render: function(props) {
+				return `<my-buttons primary="{{${props.primary}}}"></my-buttons>`
 			}
 		})
-		
-		state.component('my-button',{
-			props:['primary'],
-			render:function(props){
-				return h('button',{
-					classes:{
-						btn:true,
-						'btn-primary':props.primary
+
+		state.component('my-button', {
+			props: ['primary'],
+			render: function(props) {
+				return h('button', {
+					classes: {
+						btn: true,
+						'btn-primary': props.primary
 					},
-					text:'Button'
+					text: 'Button'
 				})
 			}
 		})
-		
-		state.component('my-buttons',{
-			props:['primary'],
-			render:function(props){
+
+		state.component('my-buttons', {
+			props: ['primary'],
+			render: function(props) {
 				return `<div class="btns"><my-button primary="{{${props.primary}}}"></my-button><my-button primary="{{${props.primary}}}"></my-button><my-button primary="{{${props.primary}}}"></my-button><my-button primary="{{${props.primary}}}"></my-button></div>`
 			}
 		})
-		
+
 		const btn = state.component('my-button')
-		state.component('my-btns',{
-			props:['primary'],
-			render:function(props){
-				return h('div',{
-					classes:['btns'],
-					slots:[
+		state.component('my-btns', {
+			props: ['primary'],
+			render: function(props) {
+				return h('div', {
+					classes: ['btns'],
+					slots: [
 						btn.render(props),
 						btn.render(props),
 						btn.render(props),
-						h('button',{
-							attrs:{
-								type:'submit'
+						h('button', {
+							attrs: {
+								type: 'submit'
 							},
-							classes:{
-								btn:true
+							classes: {
+								btn: true
 							},
-							text:'Button2'
+							text: 'Button2'
 						})
 					]
 				})
 			}
 		})
-	
+
 		//挂载
 		state.mount('#app')
 	</script>
