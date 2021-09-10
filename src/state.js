@@ -20,7 +20,10 @@ class State {
 		//指令集合
 		this.$directives = {}
 		//组件集合
-		this.$components = {}
+		this.$components = {
+			//设置默认的slot插槽组件存在
+			slot:true
+		}
 		//生命周期钩子函数
 		this.onBeforeMount = function() {}
 		this.onMounted = function() {}

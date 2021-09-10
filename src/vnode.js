@@ -34,6 +34,8 @@ class VNode {
 		this.forData = {}
 		//0示使用了if指令，1表示使用了else-if指令，2表示使用了else指令，-1表示以上皆未使用
 		this.ifType = -1
+		//如果该节点是组件渲染的，此值表示组件节点的子元素数组
+		this.componentChildren = []
 	}
 
 	/**
@@ -369,53 +371,72 @@ class VNode {
 					delete this.attrs[key]
 				}
 			}
-			//获取自定义组件的注册函数的返回值
-			let template = state.$components[name].render.apply(state.$data, [props])
-			//如果不返回任何值直接报错
-			if (!template) {
-				throw new Error('The template for component "' + name + '" is invalid')
-			}
-			let vnode = null
-			//如果返回值是字符串，则表示通过模板渲染组件
-			if (typeof template == 'string') {
-				let div = document.createElement('div')
-				div.innerHTML = template.trim()
-				//取第一个元素节点作为组件根元素
-				let el = util.getFirstElement(div)
-				//调用state的_compile方法构建该元素的虚拟节点树
-				vnode = state._compile(this.uid, el)
-				//虚拟节点树的for循环处理
-				vnode.dealFor(state)
-				//初始化虚拟节点树
-				vnode.init(state)
-			}
-			//如果是对象，则表示通过h函数创建组件
-			else if (typeof template == 'object') {
-				//创建一个虚拟节点，此时虚拟节点的数据都是初始化后的，无需再次初始化
-				vnode = new VNode(this.uid, template.tag, 1, template.attrs, template.classes, template.directives,
-					template.events, undefined)
-				//创建其子节点
-				vnode.createChildrenVNodes(template)
-				//设置虚拟节点是否渲染
-				vnode.if = template._if
-			}
-			//当虚拟节点创建完毕
-			if (vnode) {
-				//设置父节点
-				vnode.parent = this.parent
-				//合并原节点和新建节点的事件集
-				vnode.events = Object.assign(vnode.events, this.events)
-				//合并原节点和新建节点的指令集
-				vnode.directives = Object.assign(vnode.directives, this.directives)
-				//合并原节点和新建节点的样式类集
-				vnode.classes = Object.assign(vnode.classes, this.classes)
-				//合并非自定义属性的属性集
-				vnode.attrs = Object.assign(vnode.attrs, this.attrs)
-				//插入当前节点的位置，并删除当前节点
+			//单独处理slot插槽组件
+			if(name == 'slot'){
+				//获取slot父节点的componentChildren
+				let componentChildren = this.getComponentChildren()
+				//插入slot节点的位置，并删除slot节点
 				let index = this.getIndex()
-				this.parent.children.splice(index, 1, vnode)
-				//递归进行组件渲染
-				vnode.dealComponent(state)
+				this.parent.children.splice(index, 1, ...componentChildren)
+			}else {
+				//获取自定义组件的注册函数的返回值
+				let template = state.$components[name].render.apply(state.$data, [props])
+				//如果不返回任何值直接报错
+				if (!template) {
+					throw new Error('The template for component "' + name + '" is invalid')
+				}
+				let vnode = null
+				//如果返回值是字符串，则表示通过模板渲染组件
+				if (typeof template == 'string') {
+					let div = document.createElement('div')
+					div.innerHTML = template.trim()
+					//取第一个元素节点作为组件根元素
+					let el = util.getFirstElement(div)
+					if(el.nodeName.toLocaleLowerCase() === 'slot'){
+						throw new Error('Slot components cannot be used as direct elements of custom components')
+					}
+					//调用state的_compile方法构建该元素的虚拟节点树
+					vnode = state._compile(this.uid, el)
+					//虚拟节点树的for循环处理
+					vnode.dealFor(state)
+					//初始化虚拟节点树
+					vnode.init(state)
+				}
+				//如果是对象，则表示通过h函数创建组件
+				else if (typeof template == 'object') {
+					//创建一个虚拟节点，此时虚拟节点的数据都是初始化后的，无需再次初始化
+					vnode = new VNode(this.uid, template.tag, 1, template.attrs, template.classes, template.directives,
+						template.events, undefined)
+					//创建其子节点
+					vnode.createChildrenVNodes(template)
+					//设置虚拟节点是否渲染
+					vnode.if = template._if
+				}
+				//当虚拟节点创建完毕
+				if (vnode) {
+					//设置父节点
+					vnode.parent = this.parent
+					//合并原节点和新建节点的事件集
+					vnode.events = Object.assign(vnode.events, this.events)
+					//合并原节点和新建节点的指令集
+					vnode.directives = Object.assign(vnode.directives, this.directives)
+					//合并原节点和新建节点的样式类集
+					vnode.classes = Object.assign(vnode.classes, this.classes)
+					//合并非自定义属性的属性集
+					vnode.attrs = Object.assign(vnode.attrs, this.attrs)
+					//将组件子节点记录
+					let componentChildren = []
+					this.children.forEach(child=>{
+						let newChild = child.copy()
+						componentChildren.push(newChild)
+					})
+					vnode.componentChildren = componentChildren
+					//插入当前节点的位置，并删除当前节点
+					let index = this.getIndex()
+					this.parent.children.splice(index, 1, vnode)
+					//递归进行组件渲染
+					vnode.dealComponent(state)
+				}
 			}
 		}
 		//非自定义组件则递归遍历子节点，进行相同的处理
@@ -674,6 +695,17 @@ class VNode {
 			brotherNode = brotherNode.getPrevBrotherNode()
 		}
 		return brotherNode
+	}
+
+	/**
+	 * 获取componentChildren
+	 */
+	getComponentChildren(){
+		if(this.componentChildren.length){
+			return this.componentChildren
+		}else {
+			return this.parent.getComponentChildren()
+		}
 	}
 
 	/**
