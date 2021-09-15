@@ -1,6 +1,6 @@
 #### Refex是一个基于Proxy实现的轻量级MVVM框架
 
-##### 1. 基本使用
+##### 基本使用
 
 ```
 <!-- 使用双大括号进行数据渲染，可以应用在属性名、属性值和标签内容上 -->
@@ -31,7 +31,15 @@ const snap = useProxy(app)
 snap.name = 'refex是一款MVVM框架'
 ```
 
-##### 2. 数据监听
+##### 动态class
+
+```
+//class不同于其他的属性，支持动态绑定的值为对象和数组
+<div class="{{ {a:true,b:true} }}"></div>
+<div class="{{ ['a','b'] }}"></div>
+```
+
+##### 数据监听
 
 ```
 //通过watch方法实现数据监听
@@ -46,7 +54,7 @@ app.watch('name',function(newValue,oldValue){
 app.unwatch('name')
 ```
 
-##### 3. 循环渲染
+##### 循环渲染
 
 ```
 <!-- refex内部提供了@for指令，用于实现数组/对象数据的渲染 -->
@@ -69,7 +77,7 @@ app.unwatch('name')
 </ul>
 ```
 
-##### 4. 条件渲染
+##### 条件渲染
 
 ```
 <!-- 通过@if指令来控制元素是否渲染 -->
@@ -83,7 +91,7 @@ app.unwatch('name')
 <div @else></div>
 ```
 
-##### 5. 事件绑定
+##### 事件绑定
 
 ```
 <!-- 通过#前缀来给元素绑定事件 -->
@@ -118,7 +126,7 @@ const app = proxy({
 </ul>
 ```
 
-##### 6. 事件修饰符
+##### 事件修饰符
 
 > 事件的修饰符通过.来表示，可以多个一起使用
 
@@ -157,14 +165,14 @@ const app = proxy({
 <button #click.stop.prevent="change">Button</button>
 ```
 
-##### 7. show指令
+##### show指令
 
 ```
 <!-- @show只是单纯的控制display为none来隐藏元素 -->
 <div @show="show"></div>
 ```
 
-##### 8. 自定义指令
+##### 自定义指令
 
 
 ```
@@ -215,8 +223,8 @@ app.directive('focus',{
 > 回调参数el表示指令所在元素，value表示指令表达式的值，modifier表示指令修饰符，exp表示指令表达式字符串，vnode表示指令所在虚拟节点
 
 ```
-<!--修饰符的表现形式为:加上修饰符名称-->
-<input @focus:a />
+<!--修饰符的表现形式为.加上修饰符名称-->
+<input @focus.a />
 <!--这里a字符串即修饰符-->
 ```
 
@@ -229,7 +237,7 @@ if(d){
 ```
 
 
-##### 9. 自定义组件
+##### 自定义组件
 
 
 ```
@@ -271,7 +279,7 @@ render:function(props){
         attrs:{
             id:'el'
         },
-        cls:{
+        classes:{
             'my-component':true
         }
     })
@@ -284,7 +292,7 @@ render:function(props){
 //h函数的第二个参数是一个对象，包含以下属性
 {
     attrs:节点属性，如{id:'el',style:'display:block;'}
-    cls:节点的class，支持数组、对象和字符串，如['btn','btn-primary']或者{'btn':true,'btn-primary':true}或者'btn btn-primary'
+    classes:节点的class，支持数组、对象和字符串，如['btn','btn-primary']或者{'btn':true,'btn-primary':true}或者'btn btn-primary'
     directives:节点上应用的指令，是一个对象，对象的每个键名表示指令名称，键值表示指令参数（指令参数包含value和modifier两个值），如{ focus:{ value:2,modifier:'value' } }
     events:节点的事件集合，是一个对象，对象的每个键表示事件名称，键值表示事件处理函数，如{ click:function(){} }
     text:节点文本值，如果该值存在，则slots参数失效
@@ -318,3 +326,62 @@ app.component('my-component-container',{
     }
 })
 ```
+
+
+##### 内置component组件
+
+> refex内置了一个名为component的组件，可以通过name的取值来转换成任意已经定义的组件
+```
+<component name="my-component"></component>
+```
+
+> 组件的props属性是一个对象，会作为render函数参数传递给具体实现的组件，如下：
+```
+<component name="my-component" props="{{props}}"></component>
+
+const state = proxy({
+    props:{
+        primary:false
+    }
+})
+
+//以上component组件会转换为
+<my-component primary="{{false}}"></my-component>
+```
+
+
+##### 内置slot组件
+> refex内置的slot组件用于展示组件原本内容
+```
+<my-component>222</my-component>
+```
+```
+app.component('my-component',{
+    render:function(props){
+        return '<div class="demo"><slot></slot></div>'
+    }
+})
+```
+
+最终会渲染成如下：
+```
+<div class="demo">222</div>
+```
+
+> slot组件不能直接用于render函数的返回值
+```
+//如下会报错
+app.component('my-component',{
+    render:function(props){
+        return '<slot></slot>'
+    }
+})
+```
+
+> slot组件也不能直接写在自定义组件之外，比如直接写在页面上
+```
+//html页面上直接写，会导致报错
+<slot></slot>
+```
+
+### 详情请参阅[refex文档](https://www.mvi-web.cn/library/30)
