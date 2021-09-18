@@ -26,11 +26,12 @@
 		const { proxy, useProxy, h } = Refex
 		//构建响应式数据
 		const state = proxy({
-			
+			a:2
 		})
 		//拿到可直接操作的响应式对象
 		const snap = useProxy(state)
 		//挂载
-		state.mount('#app')
+		//state.mount('#app')
+		snap.a = 3
 	</script>
 </html>

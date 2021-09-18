@@ -17,6 +17,8 @@ class State {
 		this._vnode = null
 		//保存的初始未渲染元素
 		this.$template = null
+		//保存渲染后的元素
+		this.$el = null
 		//指令集合
 		this.$directives = {}
 		//组件集合
@@ -29,6 +31,8 @@ class State {
 		this.onMounted = function() {}
 		this.onBeforeUpdate = function() {}
 		this.onUpdated = function() {}
+		this.onBeforeUnmount = function(){}
+		this.onUnmounted = function(){}
 		//初始化操作
 		this._init()
 	}
@@ -49,7 +53,7 @@ class State {
 
 	/**
 	 * 注册/获取自定义组件
-	 * @param {Object} name 组件名称
+	 * @param {String} name 组件名称
 	 * @param {Object} handler 组件注册参数
 	 */
 	component(name, handler) {
@@ -78,7 +82,7 @@ class State {
 		//组件注册参数为函数
 		if (typeof handler == 'function') {
 			render = handler
-		} else if (typeof handler == 'object' && handler) {
+		} else if (util.isObject(handler)) {
 			props = handler.props || []
 			render = handler.render
 		}
@@ -130,7 +134,7 @@ class State {
 			mounted = handler
 		}
 		//如果指令注册参数是一个对象，进行相对的赋值
-		else if (typeof handler == 'object' && handler) {
+		else if (util.isObject(handler)) {
 			beforeMount = handler.beforeMount || function() {}
 			mounted = handler.mounted || function() {}
 			beforeUpdate = handler.beforeUpdate || function() {}
@@ -156,7 +160,7 @@ class State {
 
 	/**
 	 * 实现挂载
-	 * @param {Element} el 挂载元素
+	 * @param {Object} el 挂载元素或者选择器
 	 */
 	mount(el) {
 		//beforeMount生命周期函数触发
@@ -198,7 +202,23 @@ class State {
 		if (typeof this.onMounted == 'function') {
 			this.onMounted.apply(this.$data)
 		}
+		//记录根节点
+		this.$el = this._vnode.elm
 		//返回state对象
+		return this
+	}
+
+	/**
+	 * 卸载
+	 */
+	unmount(){
+		if(!this.$template){
+			return
+		}
+		this.$template = null
+		this.$vnode = null
+		this._vnode = null
+		this.$el = null
 		return this
 	}
 
@@ -287,11 +307,11 @@ class State {
 
 	/**
 	 * 更新虚拟节点
-	 * @param {Array} key
-	 * @param {Object} newValue
-	 * @param {Object} oldValue
 	 */
-	_updateVNodes(key, newValue, oldValue) {
+	_updateVNodes() {
+		if(!this.$template){
+			return
+		}
 		//更新虚拟节点树
 		this.$vnode = this._compile('v', this.$template)
 		//处理for指令进行节点克隆
@@ -686,14 +706,14 @@ class State {
 		let oldTarget = null
 		if (Array.isArray(target)) {
 			oldTarget = [...target]
-		} else if (typeof target == 'object') {
+		} else if (util.isObject(target)) {
 			oldTarget = Object.assign({}, target)
 		}
 		//记录旧的value
 		let oldValue = target[property]
 		if (Array.isArray(oldValue)) {
 			oldValue = [...oldValue]
-		} else if (typeof oldValue == 'object' && oldValue) {
+		} else if (util.isObject(oldValue)) {
 			oldValue = Object.assign({}, oldValue)
 		}
 		//设置值
@@ -705,7 +725,7 @@ class State {
 				this.onBeforeUpdate.apply(this.$data, [property, value, oldValue, target])
 			}
 			//更新虚拟节点
-			this._updateVNodes(keys, value, oldValue)
+			this._updateVNodes()
 			//针对修改对象或者数组内部元素，触发对数组或者对象的监听
 			const key1 = parentKeys.join('.')
 			if (oldTarget && parentKeys.length && this.$watchers[key1]) {
